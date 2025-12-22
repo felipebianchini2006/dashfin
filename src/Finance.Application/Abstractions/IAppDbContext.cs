@@ -6,6 +6,7 @@ namespace Finance.Application.Abstractions;
 public interface IAppDbContext : Finance.Application.Abstractions.Persistence.IUnitOfWork
 {
   DbSet<User> Users { get; }
+  DbSet<UserRefreshToken> UserRefreshTokens { get; }
   DbSet<Account> Accounts { get; }
   DbSet<ImportBatch> Imports { get; }
   DbSet<ImportRow> ImportRows { get; }

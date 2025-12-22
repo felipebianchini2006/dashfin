@@ -27,6 +27,7 @@ public static class DependencyInjection
 
     services.Configure<JwtOptions>(config.GetSection(JwtOptions.SectionName));
     services.AddSingleton<ITokenService, JwtTokenService>();
+    services.AddSingleton<IPasswordHasher, IdentityPasswordHasher>();
 
     services.Configure<LocalFileStorageOptions>(config.GetSection(LocalFileStorageOptions.SectionName));
     services.AddSingleton<IFileStorage, LocalFileStorage>();

@@ -1,5 +1,13 @@
-using Finance.Application.Abstractions;
+using Finance.Api.Auth;
+using Finance.Application.Auth.Login;
+using Finance.Application.Auth.Logout;
+using Finance.Application.Auth.Refresh;
+using Finance.Application.Auth.Register;
+using Finance.Application.Common.Exceptions;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace Finance.Api.Controllers;
 
@@ -7,53 +15,98 @@ namespace Finance.Api.Controllers;
 [Route("auth")]
 public sealed class AuthController : ControllerBase
 {
-  private readonly ITokenService _tokens;
+  private readonly IMediator _mediator;
+  private readonly AuthCookieOptions _cookieOptions;
 
-  public AuthController(ITokenService tokens) => _tokens = tokens;
+  public AuthController(IMediator mediator, IOptions<AuthCookieOptions> cookieOptions)
+  {
+    _mediator = mediator;
+    _cookieOptions = cookieOptions.Value;
+  }
 
+  public sealed record RegisterRequest(string Email, string Password);
   public sealed record LoginRequest(string Email, string Password);
-  public sealed record LoginResponse(string AccessToken);
+  public sealed record AccessTokenResponse(string AccessToken);
+
+  [HttpPost("register")]
+  [AllowAnonymous]
+  public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken ct)
+  {
+    var result = await _mediator.Send(new RegisterCommand(request.Email, request.Password), ct);
+    if (result.IsFailure)
+      throw new AppException(result.Error!);
+
+    return Created("/me", result.Value);
+  }
 
   [HttpPost("login")]
-  public IActionResult Login([FromBody] LoginRequest request)
+  [AllowAnonymous]
+  public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
   {
-    // Template only:
-    // - validate credentials against your user store
-    // - issue access token
-    // - issue refresh token cookie (httpOnly, secure in prod) and persist hashed refresh token
-    var userId = Guid.NewGuid(); // TODO
-    var accessToken = _tokens.CreateAccessToken(userId, request.Email);
-    var refreshToken = _tokens.CreateRefreshToken();
+    var result = await _mediator.Send(new LoginCommand(request.Email, request.Password), ct);
+    if (result.IsFailure)
+      throw new AppException(result.Error!);
 
+    SetRefreshTokenCookie(result.Value!.RefreshToken, result.Value.RefreshTokenExpiresAt);
+    return Ok(new AccessTokenResponse(result.Value.AccessToken));
+  }
+
+  [HttpPost("refresh")]
+  [AllowAnonymous]
+  public async Task<IActionResult> Refresh(CancellationToken ct)
+  {
+    if (!Request.Cookies.TryGetValue(_cookieOptions.RefreshTokenName, out var refreshToken) || string.IsNullOrWhiteSpace(refreshToken))
+      return Unauthorized();
+
+    var result = await _mediator.Send(new RefreshCommand(refreshToken), ct);
+    if (result.IsFailure)
+      throw new AppException(result.Error!);
+
+    SetRefreshTokenCookie(result.Value!.RefreshToken, result.Value.RefreshTokenExpiresAt);
+    return Ok(new AccessTokenResponse(result.Value.AccessToken));
+  }
+
+  [HttpPost("logout")]
+  [AllowAnonymous]
+  public async Task<IActionResult> Logout(CancellationToken ct)
+  {
+    if (Request.Cookies.TryGetValue(_cookieOptions.RefreshTokenName, out var refreshToken) && !string.IsNullOrWhiteSpace(refreshToken))
+    {
+      var result = await _mediator.Send(new LogoutCommand(refreshToken), ct);
+      if (result.IsFailure)
+        throw new AppException(result.Error!);
+    }
+
+    DeleteRefreshTokenCookie();
+    return NoContent();
+  }
+
+  private void SetRefreshTokenCookie(string refreshToken, DateTimeOffset expiresAt)
+  {
     Response.Cookies.Append(
-      "refresh_token",
+      _cookieOptions.RefreshTokenName,
       refreshToken,
       new CookieOptions
       {
         HttpOnly = true,
-        Secure = Request.IsHttps,
-        SameSite = SameSiteMode.Strict,
-        Path = "/",
-        Expires = DateTimeOffset.UtcNow.AddDays(30)
+        Secure = _cookieOptions.RefreshTokenSecure,
+        SameSite = _cookieOptions.RefreshTokenSameSite,
+        Path = _cookieOptions.RefreshTokenPath,
+        Domain = _cookieOptions.RefreshTokenDomain,
+        Expires = expiresAt
       });
-
-    return Ok(new LoginResponse(accessToken));
   }
 
-  [HttpPost("refresh")]
-  public IActionResult Refresh()
+  private void DeleteRefreshTokenCookie()
   {
-    // Template only:
-    // - read refresh_token cookie
-    // - validate against stored hash+expiry
-    // - rotate refresh token and issue new access token
-    return Problem("Not implemented", statusCode: StatusCodes.Status501NotImplemented);
-  }
-
-  [HttpPost("logout")]
-  public IActionResult Logout()
-  {
-    Response.Cookies.Delete("refresh_token", new CookieOptions { Path = "/" });
-    return NoContent();
+    Response.Cookies.Delete(
+      _cookieOptions.RefreshTokenName,
+      new CookieOptions
+      {
+        Secure = _cookieOptions.RefreshTokenSecure,
+        SameSite = _cookieOptions.RefreshTokenSameSite,
+        Path = _cookieOptions.RefreshTokenPath,
+        Domain = _cookieOptions.RefreshTokenDomain
+      });
   }
 }

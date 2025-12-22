@@ -46,4 +46,3 @@ public sealed class JwtTokenService : ITokenService
     return Convert.ToHexString(bytes).ToLowerInvariant();
   }
 }
-

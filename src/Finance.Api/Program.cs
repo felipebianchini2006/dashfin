@@ -29,6 +29,21 @@ builder.Services
 
 builder.Services.AddControllers();
 
+builder.Services.Configure<AuthCookieOptions>(builder.Configuration.GetSection(AuthCookieOptions.SectionName));
+
+builder.Services.AddCors(options =>
+{
+  options.AddPolicy("nextjs", policy =>
+  {
+    var origins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? ["http://localhost:3000"];
+    policy
+      .WithOrigins(origins)
+      .AllowAnyHeader()
+      .AllowAnyMethod()
+      .AllowCredentials();
+  });
+});
+
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails(options =>
 {
@@ -101,6 +116,8 @@ app.UseStatusCodePages(async context =>
   http.Response.ContentType = "application/problem+json";
   await http.Response.WriteAsJsonAsync(problem);
 });
+
+app.UseCors("nextjs");
 
 app.UseAuthentication();
 app.UseAuthorization();

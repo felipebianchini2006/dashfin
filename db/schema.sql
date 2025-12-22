@@ -18,8 +18,28 @@ CREATE TABLE IF NOT EXISTS users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   email citext NOT NULL UNIQUE,
   display_name text NULL,
+  password_hash text NOT NULL DEFAULT '',
+  timezone text NOT NULL DEFAULT 'America/Sao_Paulo',
+  currency char(3) NOT NULL DEFAULT 'BRL',
+  display_preferences jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- =====================
+-- Refresh tokens (JWT)
+-- =====================
+CREATE TABLE IF NOT EXISTS user_refresh_tokens (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash char(64) NOT NULL UNIQUE,
+  expires_at timestamptz NOT NULL,
+  revoked_at timestamptz NULL,
+  replaced_by_token_hash char(64) NULL,
+  revoked_reason text NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_user_refresh_tokens_user_id ON user_refresh_tokens(user_id);
 
 -- =========
 -- Accounts
@@ -224,4 +244,3 @@ CREATE INDEX IF NOT EXISTS ix_alert_events_user_id_status_occurred_at_desc ON al
 CREATE INDEX IF NOT EXISTS ix_alert_events_alert_rule_id_occurred_at_desc ON alert_events(alert_rule_id, occurred_at DESC);
 
 COMMIT;
-

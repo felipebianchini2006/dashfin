@@ -9,6 +9,7 @@ public sealed class FinanceDbContext : DbContext, IAppDbContext
   public FinanceDbContext(DbContextOptions<FinanceDbContext> options) : base(options) { }
 
   public DbSet<User> Users => Set<User>();
+  public DbSet<UserRefreshToken> UserRefreshTokens => Set<UserRefreshToken>();
   public DbSet<Account> Accounts => Set<Account>();
   public DbSet<ImportBatch> Imports => Set<ImportBatch>();
   public DbSet<ImportRow> ImportRows => Set<ImportRow>();
