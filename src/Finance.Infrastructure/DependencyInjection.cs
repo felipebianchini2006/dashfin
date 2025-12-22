@@ -3,6 +3,7 @@ using Finance.Application.Abstractions.Persistence;
 using Finance.Infrastructure.Auth;
 using Finance.Infrastructure.Common;
 using Finance.Infrastructure.Files;
+using Finance.Infrastructure.Imports;
 using Finance.Infrastructure.Jobs;
 using Finance.Infrastructure.Persistence;
 using Finance.Infrastructure.Persistence.Repositories;
@@ -40,6 +41,10 @@ public static class DependencyInjection
     services.AddHangfirePostgres(config);
     services.AddScoped<ImportJobs>();
     services.AddScoped<IImportJobQueue, HangfireImportJobQueue>();
+    services.AddScoped<PostImportJobs>();
+    services.AddScoped<IPostImportTasks, HangfirePostImportTasks>();
+    services.AddSingleton<IPdfTextExtractor, PdfPigTextExtractor>();
+    services.AddScoped<Finance.Application.Imports.Processing.ImportProcessor>();
     return services;
   }
 }
