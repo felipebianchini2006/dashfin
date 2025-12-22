@@ -13,6 +13,7 @@ public sealed class ImportBatch : BaseEntity<Guid>, IUserOwnedEntity
   public string FileSha256 { get; set; } = string.Empty;
   public string StorageProvider { get; set; } = "local";
   public string StorageKey { get; set; } = string.Empty;
+  public string? SummaryJson { get; set; }
   public DateTimeOffset? ProcessedAt { get; set; }
   public string? ErrorMessage { get; set; }
 }

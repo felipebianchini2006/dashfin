@@ -30,6 +30,7 @@ builder.Services
 builder.Services.AddControllers();
 
 builder.Services.Configure<AuthCookieOptions>(builder.Configuration.GetSection(AuthCookieOptions.SectionName));
+builder.Services.Configure<ImportUploadOptions>(builder.Configuration.GetSection(ImportUploadOptions.SectionName));
 
 builder.Services.AddCors(options =>
 {

@@ -21,6 +21,7 @@ public sealed class ImportBatchConfiguration : IEntityTypeConfiguration<ImportBa
     b.Property(x => x.FileSha256).HasColumnName("file_sha256").HasMaxLength(64).IsFixedLength();
     b.Property(x => x.StorageProvider).HasColumnName("storage_provider");
     b.Property(x => x.StorageKey).HasColumnName("storage_key");
+    b.Property(x => x.SummaryJson).HasColumnName("summary_json").HasColumnType("jsonb");
     b.Property(x => x.ProcessedAt).HasColumnName("processed_at");
     b.Property(x => x.ErrorMessage).HasColumnName("error_message");
     b.Property(x => x.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("now()");
@@ -31,4 +32,3 @@ public sealed class ImportBatchConfiguration : IEntityTypeConfiguration<ImportBa
     b.HasIndex(x => new { x.UserId, x.FileSha256 }).IsUnique().HasDatabaseName("ux_imports_user_id_file_sha256");
   }
 }
-

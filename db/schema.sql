@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS imports (
   file_sha256 char(64) NOT NULL,
   storage_provider text NOT NULL DEFAULT 'local',
   storage_key text NOT NULL,
+  summary_json jsonb NULL,
   processed_at timestamptz NULL,
   error_message text NULL,
   created_at timestamptz NOT NULL DEFAULT now(),

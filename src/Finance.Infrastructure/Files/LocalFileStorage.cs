@@ -6,6 +6,7 @@ namespace Finance.Infrastructure.Files;
 public sealed class LocalFileStorage : IFileStorage
 {
   private readonly string _root;
+  public string Provider => "local";
 
   public LocalFileStorage(IOptions<LocalFileStorageOptions> options)
   {
@@ -36,4 +37,3 @@ public sealed class LocalFileStorage : IFileStorage
     return Task.CompletedTask;
   }
 }
-

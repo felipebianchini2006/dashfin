@@ -30,9 +30,16 @@ public static class DependencyInjection
     services.AddSingleton<IPasswordHasher, IdentityPasswordHasher>();
 
     services.Configure<LocalFileStorageOptions>(config.GetSection(LocalFileStorageOptions.SectionName));
-    services.AddSingleton<IFileStorage, LocalFileStorage>();
+    services.Configure<S3FileStorageOptions>(config.GetSection(S3FileStorageOptions.SectionName));
+    var provider = (config["FileStorage:Provider"] ?? "local").ToLowerInvariant();
+    if (provider == "s3")
+      services.AddSingleton<IFileStorage, S3FileStorage>();
+    else
+      services.AddSingleton<IFileStorage, LocalFileStorage>();
 
     services.AddHangfirePostgres(config);
+    services.AddScoped<ImportJobs>();
+    services.AddScoped<IImportJobQueue, HangfireImportJobQueue>();
     return services;
   }
 }
