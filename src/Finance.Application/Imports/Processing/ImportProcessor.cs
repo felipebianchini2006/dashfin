@@ -120,74 +120,34 @@ public sealed class ImportProcessor
       }
       else if (layout == ImportLayout.NubankCartao)
       {
-        var parser = (IImportStatementParser)new NubankCartaoParser();
+        var parser = new NubankCreditCardPdfParser();
+        var result = parser.Parse(pages);
 
-        foreach (var page in pages)
+        foreach (var audit in result.RowAudits)
         {
-          foreach (var line in page.Lines)
+          rowIndex = Math.Max(rowIndex, audit.RowIndex);
+          if (audit.Status == ImportRowStatus.Error)
+            errorCount++;
+
+          rows.Add(new ImportRow
           {
-            rowIndex++;
-            if (!parser.TryParseLine(line, page.PageNumber, rowIndex, now, out var r))
-              continue;
+            ImportId = importId,
+            UserId = userId,
+            RowIndex = audit.RowIndex,
+            PageNumber = audit.PageNumber,
+            RowSha256 = HashLine(audit.Line),
+            Status = audit.Status,
+            RawText = audit.Line,
+            ErrorCode = audit.Reason,
+            ErrorMessage = audit.ErrorMessage
+          });
+        }
 
-            if (r.Transaction is not null)
-            {
-              var normalized = r.Transaction.DescriptionNormalized;
-              var fingerprint = TransactionFingerprint.Create(userId, account.Id, r.Transaction.OccurredAt, r.Transaction.Amount, r.Transaction.Currency, normalized);
-              parsed.Add(r.Transaction with { Fingerprint = fingerprint });
-
-              rows.Add(new ImportRow
-              {
-                ImportId = importId,
-                UserId = userId,
-                RowIndex = rowIndex,
-                PageNumber = page.PageNumber,
-                RowSha256 = HashLine(r.Transaction.SourceLine),
-                Status = ImportRowStatus.Parsed,
-                RawText = r.Transaction.SourceLine,
-                RawDataJson = JsonSerializer.Serialize(new
-                {
-                  occurredAt = r.Transaction.OccurredAt,
-                  amount = r.Transaction.Amount,
-                  currency = r.Transaction.Currency,
-                  description = r.Transaction.Description,
-                  descriptionNormalized = normalized,
-                  fingerprint
-                })
-              });
-              continue;
-            }
-
-            if (r.ErrorMessage is not null)
-            {
-              errorCount++;
-              rows.Add(new ImportRow
-              {
-                ImportId = importId,
-                UserId = userId,
-                RowIndex = rowIndex,
-                PageNumber = page.PageNumber,
-                RowSha256 = HashLine(line),
-                Status = ImportRowStatus.Error,
-                RawText = line,
-                ErrorCode = "parse_error",
-                ErrorMessage = r.ErrorMessage
-              });
-              continue;
-            }
-
-            rows.Add(new ImportRow
-            {
-              ImportId = importId,
-              UserId = userId,
-              RowIndex = rowIndex,
-              PageNumber = page.PageNumber,
-              RowSha256 = HashLine(line),
-              Status = ImportRowStatus.Skipped,
-              RawText = line,
-              ErrorCode = r.SkipReason
-            });
-          }
+        foreach (var t in result.ParsedTransactions)
+        {
+          var normalized = DescriptionNormalizer.Normalize(t.Description);
+          var fingerprint = TransactionFingerprint.Create(userId, account.Id, t.OccurredAt, t.Amount, t.Currency, normalized);
+          parsed.Add(new ParsedTransaction(t.OccurredAt, t.Description, t.Amount, t.Currency, normalized, fingerprint, t.SourceLine));
         }
       }
       else
