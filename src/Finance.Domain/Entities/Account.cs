@@ -10,4 +10,5 @@ public sealed class Account : BaseEntity<Guid>, IUserOwnedEntity
   public string Name { get; set; } = string.Empty;
   public string? Institution { get; set; }
   public string Currency { get; set; } = "BRL";
+  public decimal InitialBalance { get; set; }
 }

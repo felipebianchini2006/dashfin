@@ -16,9 +16,9 @@ public sealed class AccountConfiguration : IEntityTypeConfiguration<Account>
     b.Property(x => x.Name).HasColumnName("name");
     b.Property(x => x.Institution).HasColumnName("institution");
     b.Property(x => x.Currency).HasColumnName("currency").HasMaxLength(3).IsFixedLength();
+    b.Property(x => x.InitialBalance).HasColumnName("initial_balance").HasPrecision(18, 2);
     b.Property(x => x.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("now()");
 
     b.HasIndex(x => x.UserId).HasDatabaseName("ix_accounts_user_id");
   }
 }
-

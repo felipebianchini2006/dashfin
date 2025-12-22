@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   name text NOT NULL,
   institution text NULL,
   currency char(3) NOT NULL DEFAULT 'BRL',
+  initial_balance numeric(18,2) NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT ck_accounts_type CHECK (type IN (1, 2, 3))
 );
