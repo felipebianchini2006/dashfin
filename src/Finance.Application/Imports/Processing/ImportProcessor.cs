@@ -68,19 +68,17 @@ public sealed class ImportProcessor
     try
     {
       await using var pdfStream = await _storage.OpenReadAsync(import.StorageKey, ct);
-      var pages = await _pdf.ExtractTextByPageAsync(pdfStream, ct);
+      byte[] pdfBytes;
+      await using (var ms = new MemoryStream())
+      {
+        await pdfStream.CopyToAsync(ms, ct);
+        pdfBytes = ms.ToArray();
+      }
+
+      var pages = await _pdf.ExtractTextByPageAsync(pdfBytes, ct);
       var allLines = pages.SelectMany(p => p.Lines).ToList();
 
       var layout = ImportLayoutDetector.Detect(allLines);
-      var parser = layout switch
-      {
-        ImportLayout.NubankConta => (IImportStatementParser)new NubankContaParser(),
-        ImportLayout.NubankCartao => new NubankCartaoParser(),
-        _ => null
-      };
-
-      if (parser is null)
-        return await FailAsync(import, $"Unknown PDF layout for import {importId:D}.", ct);
 
       var now = _clock.UtcNow;
       var parsed = new List<ParsedTransaction>();
@@ -88,45 +86,96 @@ public sealed class ImportProcessor
       var rowIndex = 0;
       var errorCount = 0;
 
-      foreach (var page in pages)
+      if (layout == ImportLayout.NubankConta)
       {
-        foreach (var line in page.Lines)
+        var parser = new NubankCheckingPdfParser();
+        var result = parser.Parse(pages);
+
+        foreach (var audit in result.RowAudits)
         {
-          rowIndex++;
-          if (!parser.TryParseLine(line, page.PageNumber, rowIndex, now, out var r))
-            continue;
-
-          if (r.Transaction is not null)
-          {
-            var normalized = r.Transaction.DescriptionNormalized;
-            var fingerprint = TransactionFingerprint.Create(userId, account.Id, r.Transaction.OccurredAt, r.Transaction.Amount, r.Transaction.Currency, normalized);
-            parsed.Add(r.Transaction with { Fingerprint = fingerprint });
-
-            rows.Add(new ImportRow
-            {
-              ImportId = importId,
-              UserId = userId,
-              RowIndex = rowIndex,
-              PageNumber = page.PageNumber,
-              RowSha256 = HashLine(r.Transaction.SourceLine),
-              Status = ImportRowStatus.Parsed,
-              RawText = r.Transaction.SourceLine,
-              RawDataJson = JsonSerializer.Serialize(new
-              {
-                occurredAt = r.Transaction.OccurredAt,
-                amount = r.Transaction.Amount,
-                currency = r.Transaction.Currency,
-                description = r.Transaction.Description,
-                descriptionNormalized = normalized,
-                fingerprint
-              })
-            });
-            continue;
-          }
-
-          if (r.ErrorMessage is not null)
-          {
+          rowIndex = Math.Max(rowIndex, audit.RowIndex);
+          if (audit.Status == ImportRowStatus.Error)
             errorCount++;
+
+          rows.Add(new ImportRow
+          {
+            ImportId = importId,
+            UserId = userId,
+            RowIndex = audit.RowIndex,
+            PageNumber = audit.PageNumber,
+            RowSha256 = HashLine(audit.Line),
+            Status = audit.Status,
+            RawText = audit.Line,
+            ErrorCode = audit.Reason,
+            ErrorMessage = audit.ErrorMessage
+          });
+        }
+
+        foreach (var t in result.ParsedTransactions)
+        {
+          var normalized = DescriptionNormalizer.Normalize(t.Description);
+          var fingerprint = TransactionFingerprint.Create(userId, account.Id, t.OccurredAt, t.Amount, t.Currency, normalized);
+          parsed.Add(new ParsedTransaction(t.OccurredAt, t.Description, t.Amount, t.Currency, normalized, fingerprint, t.SourceLine));
+        }
+      }
+      else if (layout == ImportLayout.NubankCartao)
+      {
+        var parser = (IImportStatementParser)new NubankCartaoParser();
+
+        foreach (var page in pages)
+        {
+          foreach (var line in page.Lines)
+          {
+            rowIndex++;
+            if (!parser.TryParseLine(line, page.PageNumber, rowIndex, now, out var r))
+              continue;
+
+            if (r.Transaction is not null)
+            {
+              var normalized = r.Transaction.DescriptionNormalized;
+              var fingerprint = TransactionFingerprint.Create(userId, account.Id, r.Transaction.OccurredAt, r.Transaction.Amount, r.Transaction.Currency, normalized);
+              parsed.Add(r.Transaction with { Fingerprint = fingerprint });
+
+              rows.Add(new ImportRow
+              {
+                ImportId = importId,
+                UserId = userId,
+                RowIndex = rowIndex,
+                PageNumber = page.PageNumber,
+                RowSha256 = HashLine(r.Transaction.SourceLine),
+                Status = ImportRowStatus.Parsed,
+                RawText = r.Transaction.SourceLine,
+                RawDataJson = JsonSerializer.Serialize(new
+                {
+                  occurredAt = r.Transaction.OccurredAt,
+                  amount = r.Transaction.Amount,
+                  currency = r.Transaction.Currency,
+                  description = r.Transaction.Description,
+                  descriptionNormalized = normalized,
+                  fingerprint
+                })
+              });
+              continue;
+            }
+
+            if (r.ErrorMessage is not null)
+            {
+              errorCount++;
+              rows.Add(new ImportRow
+              {
+                ImportId = importId,
+                UserId = userId,
+                RowIndex = rowIndex,
+                PageNumber = page.PageNumber,
+                RowSha256 = HashLine(line),
+                Status = ImportRowStatus.Error,
+                RawText = line,
+                ErrorCode = "parse_error",
+                ErrorMessage = r.ErrorMessage
+              });
+              continue;
+            }
+
             rows.Add(new ImportRow
             {
               ImportId = importId,
@@ -134,26 +183,16 @@ public sealed class ImportProcessor
               RowIndex = rowIndex,
               PageNumber = page.PageNumber,
               RowSha256 = HashLine(line),
-              Status = ImportRowStatus.Error,
+              Status = ImportRowStatus.Skipped,
               RawText = line,
-              ErrorCode = "parse_error",
-              ErrorMessage = r.ErrorMessage
+              ErrorCode = r.SkipReason
             });
-            continue;
           }
-
-          rows.Add(new ImportRow
-          {
-            ImportId = importId,
-            UserId = userId,
-            RowIndex = rowIndex,
-            PageNumber = page.PageNumber,
-            RowSha256 = HashLine(line),
-            Status = ImportRowStatus.Skipped,
-            RawText = line,
-            ErrorCode = r.SkipReason
-          });
         }
+      }
+      else
+      {
+        return await FailAsync(import, $"Unknown PDF layout for import {importId:D}.", ct);
       }
 
       var parsedUnique = parsed

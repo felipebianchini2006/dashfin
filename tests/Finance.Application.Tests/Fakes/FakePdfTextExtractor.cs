@@ -6,7 +6,6 @@ internal sealed class FakePdfTextExtractor : IPdfTextExtractor
 {
   public IReadOnlyList<PdfTextPage> Pages { get; init; } = Array.Empty<PdfTextPage>();
 
-  public Task<IReadOnlyList<PdfTextPage>> ExtractTextByPageAsync(Stream pdf, CancellationToken ct)
+  public Task<IReadOnlyList<PdfTextPage>> ExtractTextByPageAsync(ReadOnlyMemory<byte> pdfBytes, CancellationToken ct)
     => Task.FromResult(Pages);
 }
-

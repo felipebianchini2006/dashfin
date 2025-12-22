@@ -34,7 +34,7 @@ public sealed class ImportProcessorIntegrationTests
     {
       Pages =
       [
-        new PdfTextPage(1, new[] { "NuConta", "05/01/2025 PIX RECEBIDO R$ 100,00" })
+        new PdfTextPage(1, "NuConta\n05/01/2025 PIX RECEBIDO R$ 100,00\n", new[] { "NuConta", "05/01/2025 PIX RECEBIDO R$ 100,00" })
       ]
     };
 
@@ -79,4 +79,3 @@ public sealed class ImportProcessorIntegrationTests
     Assert.Equal(ImportStatus.Done, i2.Status);
   }
 }
-
