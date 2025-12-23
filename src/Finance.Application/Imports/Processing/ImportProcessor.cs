@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Security.Cryptography;
 using System.Text;
 using Finance.Application.Abstractions;
+using Finance.Application.CategoryRules;
 using Finance.Application.Common;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
@@ -82,6 +83,7 @@ public sealed class ImportProcessor
 
       var now = _clock.UtcNow;
       var fingerprintBuilder = new TransactionFingerprintBuilder();
+      var autoCategorizer = new CategoryAutoCategorizer(_db);
       var parsed = new List<ParsedTransaction>();
       var rows = new List<ImportRow>();
       var rowIndex = 0;
@@ -207,6 +209,8 @@ public sealed class ImportProcessor
                     (t.LegacyFingerprint is null || !existingSet.Contains(t.LegacyFingerprint)))
         .ToList();
 
+      var compiledRules = await autoCategorizer.LoadAsync(userId, ct);
+
       // Audit rows are idempotent per run: recreate for this importId
       await _db.ImportRows.Where(r => r.ImportId == importId && r.UserId == userId).ExecuteDeleteAsync(ct);
       _db.ImportRows.AddRange(rows);
@@ -214,11 +218,13 @@ public sealed class ImportProcessor
 
       foreach (var t in toInsert)
       {
+        var categoryId = compiledRules.MatchCategoryId(account.Id, t.DescriptionNormalized, t.Amount);
         _db.Transactions.Add(new Transaction
         {
           Id = Guid.NewGuid(),
           UserId = userId,
           AccountId = account.Id,
+          CategoryId = categoryId,
           OccurredAt = t.OccurredAt,
           Description = t.Description,
           Amount = t.Amount,

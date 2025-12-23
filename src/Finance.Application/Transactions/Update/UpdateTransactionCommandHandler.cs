@@ -1,12 +1,13 @@
 using Finance.Application.Abstractions;
 using Finance.Application.Common;
 using Finance.Application.Transactions.Models;
+using Finance.Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace Finance.Application.Transactions.Update;
 
-internal sealed class UpdateTransactionCommandHandler : IRequestHandler<UpdateTransactionCommand, Result<TransactionDto>>
+internal sealed class UpdateTransactionCommandHandler : IRequestHandler<UpdateTransactionCommand, Result<UpdateTransactionResultDto>>
 {
   private readonly IAppDbContext _db;
   private readonly ICurrentUser _currentUser;
@@ -17,27 +18,30 @@ internal sealed class UpdateTransactionCommandHandler : IRequestHandler<UpdateTr
     _currentUser = currentUser;
   }
 
-  public async Task<Result<TransactionDto>> Handle(UpdateTransactionCommand request, CancellationToken ct)
+  public async Task<Result<UpdateTransactionResultDto>> Handle(UpdateTransactionCommand request, CancellationToken ct)
   {
     var userId = _currentUser.UserId;
     if (userId is null)
-      return Result.Fail<TransactionDto>(Error.Unauthorized());
+      return Result.Fail<UpdateTransactionResultDto>(Error.Unauthorized());
 
     var tx = await _db.Transactions.SingleOrDefaultAsync(t => t.Id == request.TransactionId && t.UserId == userId.Value, ct);
     if (tx is null)
-      return Result.Fail<TransactionDto>(Error.NotFound("Transaction not found."));
+      return Result.Fail<UpdateTransactionResultDto>(Error.NotFound("Transaction not found."));
 
+    var categoryChanged = false;
     if (request.CategoryId is not null)
     {
       if (request.CategoryId.Value == Guid.Empty)
       {
+        categoryChanged = tx.CategoryId is not null;
         tx.CategoryId = null;
       }
       else
       {
         var exists = await _db.Categories.AnyAsync(c => c.Id == request.CategoryId.Value && c.UserId == userId.Value, ct);
         if (!exists)
-          return Result.Fail<TransactionDto>(Error.Validation("Category not found."));
+          return Result.Fail<UpdateTransactionResultDto>(Error.Validation("Category not found."));
+        categoryChanged = tx.CategoryId != request.CategoryId.Value;
         tx.CategoryId = request.CategoryId.Value;
       }
     }
@@ -53,7 +57,23 @@ internal sealed class UpdateTransactionCommandHandler : IRequestHandler<UpdateTr
 
     await _db.SaveChangesAsync(ct);
 
-    return Result.Ok(new TransactionDto(
+    CategoryRuleSuggestionDto? suggestion = null;
+    if (categoryChanged && tx.CategoryId is not null)
+    {
+      var pattern = CategoryRuleSuggestionBuilder.BuildContainsPattern(tx.Description);
+      if (pattern is not null)
+      {
+        suggestion = new CategoryRuleSuggestionDto(
+          Reason: "transaction_recategorized",
+          Pattern: pattern,
+          MatchType: CategoryRuleMatchType.Contains,
+          CategoryId: tx.CategoryId.Value,
+          Priority: 100,
+          IsActive: true);
+      }
+    }
+
+    var dto = new TransactionDto(
       tx.Id,
       tx.AccountId,
       tx.CategoryId,
@@ -64,6 +84,7 @@ internal sealed class UpdateTransactionCommandHandler : IRequestHandler<UpdateTr
       tx.Currency,
       tx.Amount >= 0m ? TransactionFlow.Entrada : TransactionFlow.Saida,
       tx.IgnoreInDashboard));
+
+    return Result.Ok(new UpdateTransactionResultDto(dto, suggestion));
   }
 }
-

@@ -92,4 +92,3 @@ public sealed class TransactionsController : ControllerBase
     return Ok(result.Value);
   }
 }
-

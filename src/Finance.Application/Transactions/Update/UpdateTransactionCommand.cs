@@ -8,5 +8,4 @@ public sealed record UpdateTransactionCommand(
   Guid TransactionId,
   Guid? CategoryId,
   string? Notes,
-  bool? IgnoreInDashboard) : IRequest<Result<TransactionDto>>;
-
+  bool? IgnoreInDashboard) : IRequest<Result<UpdateTransactionResultDto>>;

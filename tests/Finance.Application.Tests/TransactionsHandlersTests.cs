@@ -201,16 +201,19 @@ public sealed class TransactionsHandlersTests
     var updated = await handler.Handle(new UpdateTransactionCommand(tx.Id, category.Id, "  hello  ", true), CancellationToken.None);
 
     Assert.True(updated.IsSuccess);
-    var dto = updated.Value!;
+    var dto = updated.Value!.Transaction;
     Assert.Equal(category.Id, dto.CategoryId);
     Assert.Equal("hello", dto.Notes);
     Assert.True(dto.IgnoreInDashboard);
+    Assert.NotNull(updated.Value.SuggestedRule);
+    Assert.Equal(category.Id, updated.Value.SuggestedRule!.CategoryId);
 
     var cleared = await handler.Handle(new UpdateTransactionCommand(tx.Id, Guid.Empty, "", false), CancellationToken.None);
     Assert.True(cleared.IsSuccess);
-    Assert.Null(cleared.Value!.CategoryId);
-    Assert.Null(cleared.Value!.Notes);
-    Assert.False(cleared.Value!.IgnoreInDashboard);
+    Assert.Null(cleared.Value!.Transaction.CategoryId);
+    Assert.Null(cleared.Value.Transaction.Notes);
+    Assert.False(cleared.Value.Transaction.IgnoreInDashboard);
+    Assert.Null(cleared.Value.SuggestedRule);
 
     var crossUser = await handler.Handle(new UpdateTransactionCommand(otherTx.Id, category.Id, "x", null), CancellationToken.None);
     Assert.True(crossUser.IsFailure);
@@ -241,4 +244,3 @@ public sealed class TransactionsHandlersTests
     Assert.False(missingFields.IsValid);
   }
 }
-

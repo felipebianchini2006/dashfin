@@ -18,6 +18,19 @@ public sealed class ImportProcessorIntegrationTests
     var clock = new TestClock { UtcNow = new DateTimeOffset(2025, 01, 10, 0, 0, 0, TimeSpan.Zero) };
 
     var userId = Guid.NewGuid();
+    var category = new Category { Id = Guid.NewGuid(), UserId = userId, Name = "Transferências/Interno" };
+    db.Categories.Add(category);
+    db.CategoryRules.Add(new CategoryRule
+    {
+      Id = Guid.NewGuid(),
+      UserId = userId,
+      CategoryId = category.Id,
+      MatchType = CategoryRuleMatchType.Contains,
+      Pattern = "PIX RECEBIDO",
+      Priority = 1,
+      IsActive = true
+    });
+
     var account = new Account
     {
       Id = Guid.NewGuid(),
@@ -69,6 +82,8 @@ public sealed class ImportProcessorIntegrationTests
     var r1 = await processor.ProcessImportAsync(import1, CancellationToken.None);
     Assert.True(r1.IsSuccess);
     Assert.Equal(1, await db.Transactions.CountAsync());
+    var tx = await db.Transactions.SingleAsync();
+    Assert.Equal(category.Id, tx.CategoryId);
 
     var import2 = await AddImportAsync("k2");
     var r2 = await processor.ProcessImportAsync(import2, CancellationToken.None);
