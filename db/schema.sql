@@ -187,6 +187,13 @@ CREATE INDEX IF NOT EXISTS ix_transactions_import_row_id ON transactions(import_
 --   CREATE INDEX IF NOT EXISTS ix_transactions_description_trgm ON transactions USING gin (description gin_trgm_ops);
 --   CREATE INDEX IF NOT EXISTS ix_transactions_notes_trgm ON transactions USING gin (notes gin_trgm_ops);
 
+-- Budget progress queries:
+-- - Summing monthly spend benefits from filtering by user_id + category_id + occurred_at.
+-- - Existing index `ix_transactions_user_id_category_id_occurred_at_desc` usually suffices; if needed, consider a partial index:
+--   CREATE INDEX IF NOT EXISTS ix_transactions_budget_spend
+--   ON transactions(user_id, category_id, occurred_at)
+--   WHERE amount < 0 AND ignore_in_dashboard = false;
+
 -- ========
 -- Budgets
 -- ========
