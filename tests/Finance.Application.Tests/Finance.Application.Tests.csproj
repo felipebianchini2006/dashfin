@@ -19,4 +19,10 @@
     <ProjectReference Include="..\\..\\src\\Finance.Application\\Finance.Application.csproj" />
     <ProjectReference Include="..\\..\\src\\Finance.Infrastructure\\Finance.Infrastructure.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Fixtures\\**\\*.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>

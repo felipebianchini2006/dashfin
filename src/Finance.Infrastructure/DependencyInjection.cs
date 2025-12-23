@@ -40,14 +40,35 @@ public static class DependencyInjection
     else
       services.AddSingleton<IFileStorage, LocalFileStorage>();
 
-    services.AddHangfirePostgres(config);
-    services.AddScoped<ImportJobs>();
-    services.AddScoped<IImportJobQueue, HangfireImportJobQueue>();
     services.AddScoped<GenerateAlertsService>();
     services.AddScoped<ComputeForecastService>();
-    services.AddScoped<PostImportJobs>();
-    services.AddScoped<IPostImportTasks, HangfirePostImportTasks>();
-    services.AddSingleton<IPdfTextExtractor, PdfPigTextExtractor>();
+
+    var hangfireEnabled = config.GetValue("Hangfire:Enabled", true);
+    if (hangfireEnabled)
+    {
+      services.AddHangfirePostgres(config);
+      services.AddScoped<ImportJobs>();
+      services.AddScoped<PostImportJobs>();
+      services.AddScoped<IImportJobQueue, HangfireImportJobQueue>();
+      services.AddScoped<IPostImportTasks, HangfirePostImportTasks>();
+    }
+    else
+    {
+      var importQueue = (config["Imports:JobQueue"] ?? "inline").ToLowerInvariant();
+      if (importQueue == "noop")
+        services.AddSingleton<IImportJobQueue, NoopImportJobQueue>();
+      else
+        services.AddScoped<IImportJobQueue, InlineImportJobQueue>();
+
+      services.AddSingleton<IPostImportTasks, NoopPostImportTasks>();
+    }
+
+    var pdfExtractor = (config["Imports:PdfTextExtractor"] ?? "pdfpig").ToLowerInvariant();
+    if (pdfExtractor == "plaintext")
+      services.AddSingleton<IPdfTextExtractor, PlainTextPdfTextExtractor>();
+    else
+      services.AddSingleton<IPdfTextExtractor, PdfPigTextExtractor>();
+
     services.AddScoped<Finance.Application.Imports.Processing.ImportProcessor>();
     return services;
   }

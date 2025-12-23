@@ -12,6 +12,8 @@ using Microsoft.AspNetCore.WebUtilities;
 using Serilog;
 using Microsoft.OpenApi.Models;
 using Finance.Api.Swagger;
+using Finance.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -173,4 +175,13 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+if (app.Configuration.GetValue("Database:EnsureCreated", false))
+{
+  using var scope = app.Services.CreateScope();
+  var db = scope.ServiceProvider.GetRequiredService<FinanceDbContext>();
+  db.Database.EnsureCreated();
+}
+
 app.Run();
+
+public partial class Program { }

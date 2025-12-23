@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Unit tests
+        run: dotnet test tests/Finance.Application.Tests/Finance.Application.Tests.csproj
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: API integration tests (Postgres)
+        env:
+          TEST_POSTGRES_CONNECTION: Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=postgres
+        run: dotnet test tests/Finance.Api.IntegrationTests/Finance.Api.IntegrationTests.csproj
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [unit, integration]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web deps
+        run: npm -C web ci
+
+      - name: Install Playwright browsers
+        run: npx -C web playwright install --with-deps chromium
+
+      - name: Start API
+        env:
+          ConnectionStrings__Default: Host=localhost;Port=5432;Database=dashfin_e2e;Username=postgres;Password=postgres
+          Database__EnsureCreated: "true"
+          Hangfire__Enabled: "false"
+          Imports__JobQueue: inline
+          Imports__PdfTextExtractor: plaintext
+          FileStorage__Provider: local
+          FileStorage__Local__RootPath: var/e2e-files
+          AuthCookies__RefreshTokenSecure: "false"
+          AuthCookies__RefreshTokenSameSite: Lax
+        run: |
+          dotnet run --project src/Finance.Api --urls http://localhost:5000 &
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:5000/health >/dev/null && break
+            sleep 1
+          done
+
+      - name: Run E2E
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:5000
+          E2E_NO_WEB_SERVER: "1"
+        run: |
+          npm -C web run dev -- --port 3000 &
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:3000 >/dev/null && break
+            sleep 1
+          done
+          npm -C web run e2e
+

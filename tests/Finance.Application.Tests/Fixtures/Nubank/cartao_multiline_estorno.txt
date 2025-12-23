@@ -1,0 +1,8 @@
+Fatura Nubank
+Janeiro 2025
+02 JAN UBER *TRIP
+R$ 15,90
+03 JAN ESTORNO UBER
+R$ 15,90
+Vencimento 10 JAN
+
