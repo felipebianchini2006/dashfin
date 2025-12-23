@@ -12,6 +12,7 @@ import type {
   CategoryRuleMatchType,
   CategoryDto,
   UpdateTransactionResultDto,
+  DashboardDto,
   DashboardBalancesDto,
   DashboardCategoriesDto,
   DashboardSummaryDto,
@@ -192,6 +193,13 @@ export function useDashboardSummary(month: string) {
   return useQuery({
     queryKey: ["dashboardSummary", month],
     queryFn: async () => (await api.get<DashboardSummaryDto>("/dashboard/summary", { params: { month } })).data
+  });
+}
+
+export function useDashboard(month: string) {
+  return useQuery({
+    queryKey: ["dashboard", month],
+    queryFn: async () => (await api.get<DashboardDto>("/dashboard", { params: { month } })).data
   });
 }
 

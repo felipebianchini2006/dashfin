@@ -153,6 +153,27 @@ export type DashboardBalancesDto = {
   netWorth: number | null;
 };
 
+export type ForecastCategoryDto = {
+  categoryId: Guid;
+  categoryName: string;
+  spentToDate: number;
+  projectedTotal: number;
+  budgetLimit: number | null;
+  riskOfExceedingBudget: boolean;
+};
+
+export type ForecastDto = {
+  month: string;
+  asOfDate: string;
+  totalSpentToDate: number;
+  totalProjected: number;
+  categories: ForecastCategoryDto[];
+};
+
+export type DashboardDto = {
+  forecast: ForecastDto;
+};
+
 export enum ImportStatus {
   Uploaded = 0,
   Processing = 1,
