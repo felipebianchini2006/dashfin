@@ -26,10 +26,12 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD:-123456}
     volumes:
       - ./db:/db:ro
-    entrypoint: ["/bin/sh", "-lc"]
-    command: >
-      psql "host=postgres port=5432 dbname=dashfin user=postgres" -v ON_ERROR_STOP=1 -f /db/schema.sql
-      && for f in /db/migrations/*.sql; do echo "Applying $f"; psql "host=postgres port=5432 dbname=dashfin user=postgres" -v ON_ERROR_STOP=1 -f "$f"; done
+    command:
+      - /bin/sh
+      - -lc
+      - >
+        psql -h postgres -p 5432 -U postgres -d dashfin -v ON_ERROR_STOP=1 -f /db/schema.sql
+        && for f in /db/migrations/*.sql; do echo "Applying $$f"; psql -h postgres -p 5432 -U postgres -d dashfin -v ON_ERROR_STOP=1 -f "$$f"; done
     restart: "no"
 
   api:
@@ -91,4 +93,3 @@ volumes:
   api_files:
   nuget_cache:
   web_node_modules:
-
