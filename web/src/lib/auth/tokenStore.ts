@@ -18,6 +18,7 @@ export function clearAccessToken() {
 
 export function subscribeAccessToken(sub: Subscriber) {
   subs.add(sub);
-  return () => subs.delete(sub);
+  return () => {
+    subs.delete(sub);
+  };
 }
-

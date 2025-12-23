@@ -1,5 +1,6 @@
 using Finance.Application.Abstractions;
 using Finance.Application.Imports.Get;
+using Finance.Application.Imports.List;
 using Finance.Application.Imports.Rows;
 using Finance.Application.Imports.Upload;
 using Finance.Application.Tests.Fakes;
@@ -167,6 +168,62 @@ public sealed class ImportsHandlersTests
   }
 
   [Fact]
+  public async Task ListImports_filters_by_status_and_is_scoped_to_user()
+  {
+    await using var db = CreateDb();
+    var userId = Guid.NewGuid();
+    var otherUserId = Guid.NewGuid();
+    var currentUser = new TestCurrentUser { UserId = userId };
+
+    var account = new Account { Id = Guid.NewGuid(), UserId = userId, Type = AccountType.Checking, Name = "Banco", Currency = "BRL" };
+    db.Accounts.Add(account);
+
+    db.Imports.AddRange(
+      new ImportBatch
+      {
+        Id = Guid.NewGuid(),
+        UserId = userId,
+        AccountId = account.Id,
+        Status = ImportStatus.Uploaded,
+        FileName = "a.pdf",
+        FileSha256 = new string('a', 64),
+        StorageProvider = "local",
+        StorageKey = "k1"
+      },
+      new ImportBatch
+      {
+        Id = Guid.NewGuid(),
+        UserId = userId,
+        AccountId = account.Id,
+        Status = ImportStatus.Done,
+        FileName = "b.pdf",
+        FileSha256 = new string('b', 64),
+        StorageProvider = "local",
+        StorageKey = "k2"
+      },
+      new ImportBatch
+      {
+        Id = Guid.NewGuid(),
+        UserId = otherUserId,
+        AccountId = account.Id,
+        Status = ImportStatus.Done,
+        FileName = "x.pdf",
+        FileSha256 = new string('c', 64),
+        StorageProvider = "local",
+        StorageKey = "k3"
+      });
+
+    await db.SaveChangesAsync(CancellationToken.None);
+
+    var handler = new ListImportsQueryHandler(db, currentUser);
+    var result = await handler.Handle(new ListImportsQuery(ImportStatus.Done, Page: 1, PageSize: 50), CancellationToken.None);
+
+    Assert.True(result.IsSuccess);
+    Assert.Single(result.Value!.Items);
+    Assert.Equal(ImportStatus.Done, result.Value.Items[0].Status);
+  }
+
+  [Fact]
   public async Task ListImportRows_filters_error_only()
   {
     await using var db = CreateDb();
@@ -201,4 +258,3 @@ public sealed class ImportsHandlersTests
     Assert.All(result.Value, r => Assert.Equal(ImportRowStatus.Error, r.Status));
   }
 }
-

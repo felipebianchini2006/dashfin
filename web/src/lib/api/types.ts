@@ -121,3 +121,50 @@ export type DashboardBalancesDto = {
   netWorth: number | null;
 };
 
+export enum ImportStatus {
+  Uploaded = 0,
+  Processing = 1,
+  Done = 2,
+  Failed = 3
+}
+
+export type ImportAccountInfoDto = {
+  id: Guid;
+  name: string;
+  type: AccountType;
+  currency: string;
+};
+
+export type ImportDto = {
+  id: Guid;
+  status: ImportStatus;
+  summaryJson: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  account: ImportAccountInfoDto | null;
+};
+
+export type ImportListItemDto = ImportDto;
+
+export type ListImportsResponse = {
+  items: ImportListItemDto[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+};
+
+export enum ImportRowStatus {
+  Parsed = 0,
+  Skipped = 1,
+  Error = 2
+}
+
+export type ImportRowAuditDto = {
+  id: number;
+  rowIndex: number;
+  pageNumber: number | null;
+  status: ImportRowStatus;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+};

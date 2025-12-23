@@ -1,5 +1,6 @@
 using Finance.Application.Common.Exceptions;
 using Finance.Application.Imports.Get;
+using Finance.Application.Imports.List;
 using Finance.Application.Imports.Rows;
 using Finance.Application.Imports.Upload;
 using Finance.Domain.Enums;
@@ -27,6 +28,23 @@ public sealed class ImportsController : ControllerBase
   }
 
   public sealed record UploadImportResponse(Guid ImportId);
+
+  [HttpGet]
+  public async Task<IActionResult> List([FromQuery] string? status, [FromQuery] int page = 1, [FromQuery(Name = "page_size")] int pageSize = 50, CancellationToken ct = default)
+  {
+    ImportStatus? parsed = null;
+    if (!string.IsNullOrWhiteSpace(status))
+    {
+      if (!Enum.TryParse<ImportStatus>(status, ignoreCase: true, out var s))
+        throw new AppException(Finance.Application.Common.Error.Validation("Invalid status."));
+      parsed = s;
+    }
+
+    var result = await _mediator.Send(new ListImportsQuery(parsed, page, pageSize), ct);
+    if (result.IsFailure)
+      throw new AppException(result.Error!);
+    return Ok(result.Value);
+  }
 
   [HttpPost]
   [Consumes("multipart/form-data")]
@@ -75,4 +93,3 @@ public sealed class ImportsController : ControllerBase
     return Ok(result.Value);
   }
 }
-
