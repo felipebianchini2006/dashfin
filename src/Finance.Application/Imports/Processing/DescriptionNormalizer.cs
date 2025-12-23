@@ -93,6 +93,9 @@ public static class DescriptionNormalizer
       filtered.Add(token);
     }
 
+    if (filtered.Count == 0)
+      return collapsed.Normalize(NormalizationForm.FormC);
+
     return string.Join(' ', filtered).Normalize(NormalizationForm.FormC);
   }
 
@@ -134,7 +137,10 @@ public static class DescriptionNormalizer
         isAllHex = false;
     }
 
-    if (isAllDigits && token.Length >= 4)
+    if (isAllDigits && token.Length == 4 && int.TryParse(token, out var year) && year is >= 1900 and <= 2100)
+      return false;
+
+    if (isAllDigits && token.Length >= 6)
       return true;
 
     if (hasLetter && hasDigit && token.Length >= 8)

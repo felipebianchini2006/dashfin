@@ -5,6 +5,7 @@ using Finance.Api.Errors;
 using Finance.Api.Middleware;
 using Finance.Application;
 using Finance.Infrastructure;
+using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
@@ -16,6 +17,7 @@ using Finance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Finance.Api.Health;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Finance.Api.Hangfire;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -199,6 +201,16 @@ app.UseCors("nextjs");
 app.UseAuthentication();
 app.UseMiddleware<RequestLogContextMiddleware>();
 app.UseAuthorization();
+
+var hangfireEnabled = app.Configuration.GetValue("Hangfire:Enabled", true);
+var hangfireDashboardEnabled = app.Configuration.GetValue("Hangfire:Dashboard:Enabled", true);
+if (hangfireEnabled && hangfireDashboardEnabled)
+{
+  app.UseHangfireDashboard("/hangfire", new DashboardOptions
+  {
+    Authorization = [new HangfireDashboardAuthFilter(app.Configuration)]
+  });
+}
 
 app.MapControllers();
 

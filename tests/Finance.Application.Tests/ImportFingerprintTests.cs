@@ -68,4 +68,20 @@ public sealed class ImportFingerprintTests
     Assert.Equal(a.Hash, b.Hash);
     Assert.NotEqual(a.Hash, c.Hash);
   }
+
+  [Fact]
+  public void Ano_com_quatro_digitos_e_preservado_para_evitar_colisoes_entre_descricoes_semelhantes()
+  {
+    var builder = new TransactionFingerprintBuilder();
+    var userId = Guid.NewGuid();
+    var accountId = Guid.NewGuid();
+    var occurredAt = new DateTimeOffset(2025, 03, 02, 0, 0, 0, TimeSpan.Zero);
+    var amount = -100m;
+
+    var a = builder.Build(userId, accountId, occurredAt, amount, "ANUIDADE 2024 CARTAO");
+    var b = builder.Build(userId, accountId, occurredAt, amount, "ANUIDADE 2025 CARTAO");
+
+    Assert.NotEqual(a.DescriptionNormalized, b.DescriptionNormalized);
+    Assert.NotEqual(a.Hash, b.Hash);
+  }
 }

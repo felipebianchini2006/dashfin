@@ -1,0 +1,94 @@
+name: dashfin
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: dashfin
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123456}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dashfin"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    image: postgres:16
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-123456}
+    volumes:
+      - ./db:/db:ro
+    entrypoint: ["/bin/sh", "-lc"]
+    command: >
+      psql "host=postgres port=5432 dbname=dashfin user=postgres" -v ON_ERROR_STOP=1 -f /db/schema.sql
+      && for f in /db/migrations/*.sql; do echo "Applying $f"; psql "host=postgres port=5432 dbname=dashfin user=postgres" -v ON_ERROR_STOP=1 -f "$f"; done
+    restart: "no"
+
+  api:
+    image: mcr.microsoft.com/dotnet/sdk:8.0
+    working_dir: /src
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:5000
+      DOTNET_USE_POLLING_FILE_WATCHER: "1"
+
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=dashfin;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres}
+
+      Jwt__Issuer: dashfin
+      Jwt__Audience: dashfin
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-CHANGE_ME_DEV_ONLY}
+
+      Cors__AllowedOrigins__0: http://localhost:3000
+
+      AuthCookies__RefreshTokenSecure: "false"
+      AuthCookies__RefreshTokenSameSite: Lax
+
+      FileStorage__Provider: local
+      FileStorage__Local__RootPath: /data/files
+
+      Hangfire__Enabled: "true"
+      Hangfire__Dashboard__Enabled: "true"
+      Hangfire__Dashboard__Username: ${HANGFIRE_USER:-admin}
+      Hangfire__Dashboard__Password: ${HANGFIRE_PASSWORD:-admin}
+    volumes:
+      - ./:/src
+      - api_files:/data/files
+      - nuget_cache:/root/.nuget/packages
+    ports:
+      - "5000:5000"
+    command: >
+      bash -lc "dotnet restore && dotnet watch --project src/Finance.Api run --urls http://0.0.0.0:5000"
+
+  web:
+    image: node:22-bookworm-slim
+    working_dir: /app
+    depends_on:
+      - api
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:5000
+      NEXT_TELEMETRY_DISABLED: "1"
+      CHOKIDAR_USEPOLLING: "1"
+    volumes:
+      - ./web:/app
+      - web_node_modules:/app/node_modules
+    ports:
+      - "3000:3000"
+    command: >
+      bash -lc "npm install && npm run dev -- --hostname 0.0.0.0 --port 3000"
+
+volumes:
+  postgres_data:
+  api_files:
+  nuget_cache:
+  web_node_modules:
+
