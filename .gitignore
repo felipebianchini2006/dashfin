@@ -1,0 +1,49 @@
+# --- OS / Editor ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+*.bak
+*.log
+
+.idea/
+.vscode/
+.vs/
+
+# --- Environment / Secrets ---
+.env
+.env.*
+!.env.example
+
+# --- .NET / Visual Studio ---
+**/bin/
+**/obj/
+**/TestResults/
+**/*.user
+**/*.suo
+**/*.userosscache
+**/*.sln.docstates
+**/*.cache
+**/*.nupkg
+**/*.snupkg
+artifacts/
+
+# --- Node / Next.js ---
+**/node_modules/
+web/.next/
+web/out/
+web/dist/
+web/.turbo/
+web/.eslintcache
+web/npm-debug.log*
+web/yarn-debug.log*
+web/yarn-error.log*
+web/pnpm-debug.log*
+
+# --- Playwright ---
+web/playwright-report/
+web/test-results/
+
+# --- Local storage (uploads, etc.) ---
+var/
