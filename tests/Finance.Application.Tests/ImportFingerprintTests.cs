@@ -6,20 +6,66 @@ namespace Finance.Application.Tests;
 public sealed class ImportFingerprintTests
 {
   [Fact]
-  public void Fingerprint_is_stable_with_description_normalization()
+  public void Mesmo_lancamento_com_descricoes_ligeiramente_diferentes_tem_mesmo_fingerprint()
   {
+    var builder = new TransactionFingerprintBuilder();
     var userId = Guid.NewGuid();
     var accountId = Guid.NewGuid();
     var occurredAt = new DateTimeOffset(2025, 01, 05, 0, 0, 0, TimeSpan.Zero);
     var amount = 10.50m;
 
-    var d1 = DescriptionNormalizer.Normalize("Café  Uber");
-    var d2 = DescriptionNormalizer.Normalize("Cafe uber ");
+    var t1 = builder.Build(userId, accountId, occurredAt, amount, "Café  Uber *TRIP 123456");
+    var t2 = builder.Build(userId, accountId, occurredAt, amount, "Cafe uber trip 987654 ");
 
-    var f1 = TransactionFingerprint.Create(userId, accountId, occurredAt, amount, "BRL", d1);
-    var f2 = TransactionFingerprint.Create(userId, accountId, occurredAt, amount, "BRL", d2);
+    Assert.Equal("CAFE UBER TRIP", t1.DescriptionNormalized);
+    Assert.Equal(t1.Hash, t2.Hash);
+  }
 
-    Assert.Equal(f1, f2);
+  [Fact]
+  public void Mesma_data_e_valor_mas_descricoes_diferentes_nao_deduplica()
+  {
+    var builder = new TransactionFingerprintBuilder();
+    var userId = Guid.NewGuid();
+    var accountId = Guid.NewGuid();
+    var occurredAt = new DateTimeOffset(2025, 01, 05, 0, 0, 0, TimeSpan.Zero);
+    var amount = -42.10m;
+
+    var a = builder.Build(userId, accountId, occurredAt, amount, "UBER TRIP");
+    var b = builder.Build(userId, accountId, occurredAt, amount, "IFOOD");
+
+    Assert.NotEqual(a.Hash, b.Hash);
+  }
+
+  [Fact]
+  public void Lancamentos_repetidos_reais_tem_o_mesmo_fingerprint()
+  {
+    var builder = new TransactionFingerprintBuilder();
+    var userId = Guid.NewGuid();
+    var accountId = Guid.NewGuid();
+    var occurredAt = new DateTimeOffset(2025, 02, 10, 0, 0, 0, TimeSpan.Zero);
+    var amount = 100m;
+
+    var a = builder.Build(userId, accountId, occurredAt, amount, "PIX RECEBIDO JOAO SILVA");
+    var b = builder.Build(userId, accountId, occurredAt, amount, "PIX  recebido  João  Silva ");
+
+    Assert.Equal(a.Hash, b.Hash);
+  }
+
+  [Fact]
+  public void Hash_do_source_line_e_opcional_e_resiliente_a_espacos()
+  {
+    var builder = new TransactionFingerprintBuilder();
+    var userId = Guid.NewGuid();
+    var accountId = Guid.NewGuid();
+    var occurredAt = new DateTimeOffset(2025, 03, 01, 0, 0, 0, TimeSpan.Zero);
+    var amount = -9.99m;
+
+    var opts = new TransactionFingerprintOptions(IncludeSourceLineHash: true);
+    var a = builder.Build(userId, accountId, occurredAt, amount, "UBER TRIP", sourceLine: "01/03 UBER   TRIP R$ 9,99", options: opts);
+    var b = builder.Build(userId, accountId, occurredAt, amount, "UBER TRIP", sourceLine: "01/03 UBER TRIP R$ 9,99", options: opts);
+    var c = builder.Build(userId, accountId, occurredAt, amount, "UBER TRIP", sourceLine: "01/03 UBER TRIP R$ 10,99", options: opts);
+
+    Assert.Equal(a.Hash, b.Hash);
+    Assert.NotEqual(a.Hash, c.Hash);
   }
 }
-

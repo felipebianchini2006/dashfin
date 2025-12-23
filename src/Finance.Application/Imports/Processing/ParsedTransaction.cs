@@ -7,5 +7,5 @@ public sealed record ParsedTransaction(
   string Currency,
   string DescriptionNormalized,
   string Fingerprint,
-  string SourceLine);
-
+  string SourceLine,
+  string? LegacyFingerprint = null);

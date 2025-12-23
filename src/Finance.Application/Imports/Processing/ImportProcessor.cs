@@ -81,6 +81,7 @@ public sealed class ImportProcessor
       var layout = ImportLayoutDetector.Detect(allLines);
 
       var now = _clock.UtcNow;
+      var fingerprintBuilder = new TransactionFingerprintBuilder();
       var parsed = new List<ParsedTransaction>();
       var rows = new List<ImportRow>();
       var rowIndex = 0;
@@ -113,9 +114,24 @@ public sealed class ImportProcessor
 
         foreach (var t in result.ParsedTransactions)
         {
-          var normalized = DescriptionNormalizer.Normalize(t.Description);
-          var fingerprint = TransactionFingerprint.Create(userId, account.Id, t.OccurredAt, t.Amount, t.Currency, normalized);
-          parsed.Add(new ParsedTransaction(t.OccurredAt, t.Description, t.Amount, t.Currency, normalized, fingerprint, t.SourceLine));
+          var built = fingerprintBuilder.BuildWithLegacy(
+            userId,
+            account.Id,
+            t.OccurredAt,
+            t.Amount,
+            t.Description,
+            t.Currency,
+            t.SourceLine);
+
+          parsed.Add(new ParsedTransaction(
+            t.OccurredAt,
+            t.Description,
+            t.Amount,
+            t.Currency,
+            built.DescriptionNormalized,
+            built.Hash,
+            t.SourceLine,
+            built.LegacyHash));
         }
       }
       else if (layout == ImportLayout.NubankCartao)
@@ -145,9 +161,24 @@ public sealed class ImportProcessor
 
         foreach (var t in result.ParsedTransactions)
         {
-          var normalized = DescriptionNormalizer.Normalize(t.Description);
-          var fingerprint = TransactionFingerprint.Create(userId, account.Id, t.OccurredAt, t.Amount, t.Currency, normalized);
-          parsed.Add(new ParsedTransaction(t.OccurredAt, t.Description, t.Amount, t.Currency, normalized, fingerprint, t.SourceLine));
+          var built = fingerprintBuilder.BuildWithLegacy(
+            userId,
+            account.Id,
+            t.OccurredAt,
+            t.Amount,
+            t.Description,
+            t.Currency,
+            t.SourceLine);
+
+          parsed.Add(new ParsedTransaction(
+            t.OccurredAt,
+            t.Description,
+            t.Amount,
+            t.Currency,
+            built.DescriptionNormalized,
+            built.Hash,
+            t.SourceLine,
+            built.LegacyHash));
         }
       }
       else
@@ -160,7 +191,10 @@ public sealed class ImportProcessor
         .Select(g => g.First())
         .ToList();
 
-      var fingerprints = parsedUnique.Select(t => t.Fingerprint).ToList();
+      var fingerprints = parsedUnique
+        .SelectMany(t => t.LegacyFingerprint is null ? [t.Fingerprint] : [t.Fingerprint, t.LegacyFingerprint])
+        .Distinct(StringComparer.Ordinal)
+        .ToList();
       var existingBefore = await _db.Transactions
         .AsNoTracking()
         .Where(t => t.UserId == userId && fingerprints.Contains(t.Fingerprint))
@@ -168,7 +202,10 @@ public sealed class ImportProcessor
         .ToListAsync(ct);
 
       var existingSet = existingBefore.ToHashSet(StringComparer.Ordinal);
-      var toInsert = parsedUnique.Where(t => !existingSet.Contains(t.Fingerprint)).ToList();
+      var toInsert = parsedUnique
+        .Where(t => !existingSet.Contains(t.Fingerprint) &&
+                    (t.LegacyFingerprint is null || !existingSet.Contains(t.LegacyFingerprint)))
+        .ToList();
 
       // Audit rows are idempotent per run: recreate for this importId
       await _db.ImportRows.Where(r => r.ImportId == importId && r.UserId == userId).ExecuteDeleteAsync(ct);
