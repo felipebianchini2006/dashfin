@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Security.Cryptography;
 using System.Text;
+using System.Diagnostics;
 using Finance.Application.Abstractions;
 using Finance.Application.CategoryRules;
 using Finance.Application.Common;
@@ -38,6 +39,7 @@ public sealed class ImportProcessor
 
   public async Task<Result> ProcessImportAsync(Guid importId, CancellationToken ct)
   {
+    var totalSw = Stopwatch.StartNew();
     using var scope = _logger.BeginScope(new Dictionary<string, object> { ["importId"] = importId });
 
     var import = await _db.Imports.SingleOrDefaultAsync(i => i.Id == importId, ct);
@@ -51,6 +53,7 @@ public sealed class ImportProcessor
     }
 
     var userId = import.UserId;
+    using var userScope = _logger.BeginScope(new Dictionary<string, object> { ["userId"] = userId });
     if (import.AccountId is null)
       return Result.Fail(Error.Validation("Missing account_id."));
 
@@ -68,6 +71,7 @@ public sealed class ImportProcessor
 
     try
     {
+      var stageSw = Stopwatch.StartNew();
       await using var pdfStream = await _storage.OpenReadAsync(import.StorageKey, ct);
       byte[] pdfBytes;
       await using (var ms = new MemoryStream())
@@ -75,11 +79,17 @@ public sealed class ImportProcessor
         await pdfStream.CopyToAsync(ms, ct);
         pdfBytes = ms.ToArray();
       }
+      _logger.LogInformation("Import stage read_pdf done in {ElapsedMs}ms (bytes={Bytes})", stageSw.ElapsedMilliseconds, pdfBytes.Length);
 
+      stageSw.Restart();
       var pages = await _pdf.ExtractTextByPageAsync(pdfBytes, ct);
       var allLines = pages.SelectMany(p => p.Lines).ToList();
+      _logger.LogInformation("Import stage extract_text done in {ElapsedMs}ms (pages={Pages}, lines={Lines})",
+        stageSw.ElapsedMilliseconds, pages.Count, allLines.Count);
 
+      stageSw.Restart();
       var layout = ImportLayoutDetector.Detect(allLines);
+      _logger.LogInformation("Import stage detect_layout done in {ElapsedMs}ms (layout={Layout})", stageSw.ElapsedMilliseconds, layout);
 
       var now = _clock.UtcNow;
       var fingerprintBuilder = new TransactionFingerprintBuilder();
@@ -88,17 +98,23 @@ public sealed class ImportProcessor
       var rows = new List<ImportRow>();
       var rowIndex = 0;
       var errorCount = 0;
+      var skippedCount = 0;
 
       if (layout == ImportLayout.NubankConta)
       {
+        stageSw.Restart();
         var parser = new NubankCheckingPdfParser();
         var result = parser.Parse(pages);
+        _logger.LogInformation("Import stage parse done in {ElapsedMs}ms (parser={Parser}, defaultYear={DefaultYear})",
+          stageSw.ElapsedMilliseconds, nameof(NubankCheckingPdfParser), result.DefaultYear);
 
         foreach (var audit in result.RowAudits)
         {
           rowIndex = Math.Max(rowIndex, audit.RowIndex);
           if (audit.Status == ImportRowStatus.Error)
             errorCount++;
+          if (audit.Status == ImportRowStatus.Skipped)
+            skippedCount++;
 
           rows.Add(new ImportRow
           {
@@ -138,14 +154,19 @@ public sealed class ImportProcessor
       }
       else if (layout == ImportLayout.NubankCartao)
       {
+        stageSw.Restart();
         var parser = new NubankCreditCardPdfParser();
         var result = parser.Parse(pages);
+        _logger.LogInformation("Import stage parse done in {ElapsedMs}ms (parser={Parser}, defaultYear={DefaultYear})",
+          stageSw.ElapsedMilliseconds, nameof(NubankCreditCardPdfParser), result.DefaultYear);
 
         foreach (var audit in result.RowAudits)
         {
           rowIndex = Math.Max(rowIndex, audit.RowIndex);
           if (audit.Status == ImportRowStatus.Error)
             errorCount++;
+          if (audit.Status == ImportRowStatus.Skipped)
+            skippedCount++;
 
           rows.Add(new ImportRow
           {
@@ -188,20 +209,26 @@ public sealed class ImportProcessor
         return await FailAsync(import, $"Unknown PDF layout for import {importId:D}.", ct);
       }
 
+      stageSw.Restart();
       var parsedUnique = parsed
         .GroupBy(t => t.Fingerprint, StringComparer.Ordinal)
         .Select(g => g.First())
         .ToList();
+      _logger.LogInformation("Import stage normalize_dedupe_keys done in {ElapsedMs}ms (parsed={Parsed}, unique={Unique}, skipped={Skipped}, errors={Errors})",
+        stageSw.ElapsedMilliseconds, parsed.Count, parsedUnique.Count, skippedCount, errorCount);
 
       var fingerprints = parsedUnique
         .SelectMany(t => t.LegacyFingerprint is null ? [t.Fingerprint] : [t.Fingerprint, t.LegacyFingerprint])
         .Distinct(StringComparer.Ordinal)
         .ToList();
+
+      stageSw.Restart();
       var existingBefore = await _db.Transactions
         .AsNoTracking()
         .Where(t => t.UserId == userId && fingerprints.Contains(t.Fingerprint))
         .Select(t => t.Fingerprint)
         .ToListAsync(ct);
+      _logger.LogInformation("Import stage load_existing_fingerprints done in {ElapsedMs}ms (existing={Existing})", stageSw.ElapsedMilliseconds, existingBefore.Count);
 
       var existingSet = existingBefore.ToHashSet(StringComparer.Ordinal);
       var toInsert = parsedUnique
@@ -209,13 +236,18 @@ public sealed class ImportProcessor
                     (t.LegacyFingerprint is null || !existingSet.Contains(t.LegacyFingerprint)))
         .ToList();
 
+      stageSw.Restart();
       var compiledRules = await autoCategorizer.LoadAsync(userId, ct);
+      _logger.LogInformation("Import stage load_category_rules done in {ElapsedMs}ms", stageSw.ElapsedMilliseconds);
 
       // Audit rows are idempotent per run: recreate for this importId
+      stageSw.Restart();
       await _db.ImportRows.Where(r => r.ImportId == importId && r.UserId == userId).ExecuteDeleteAsync(ct);
       _db.ImportRows.AddRange(rows);
       await _db.SaveChangesAsync(ct);
+      _logger.LogInformation("Import stage upsert_rows done in {ElapsedMs}ms (rows={Rows})", stageSw.ElapsedMilliseconds, rows.Count);
 
+      stageSw.Restart();
       foreach (var t in toInsert)
       {
         var categoryId = compiledRules.MatchCategoryId(account.Id, t.DescriptionNormalized, t.Amount);
@@ -248,20 +280,28 @@ public sealed class ImportProcessor
           .ToListAsync(ct);
 
         var existingNowSet = existingNow.ToHashSet(StringComparer.Ordinal);
+        var detached = 0;
         foreach (var entry in _db.ChangeTracker.Entries<Transaction>().Where(e => e.State == EntityState.Added).ToList())
         {
           if (existingNowSet.Contains(entry.Entity.Fingerprint))
+          {
             entry.State = EntityState.Detached;
+            detached++;
+          }
         }
 
+        _logger.LogInformation("Import insert retry: removed {Detached} duplicates after conflict detection", detached);
         await _db.SaveChangesAsync(ct);
       }
+      _logger.LogInformation("Import stage insert_transactions done in {ElapsedMs}ms (candidates={Candidates})", stageSw.ElapsedMilliseconds, toInsert.Count);
 
+      stageSw.Restart();
       var existingAfter = await _db.Transactions
         .AsNoTracking()
         .Where(t => t.UserId == userId && fingerprints.Contains(t.Fingerprint))
         .Select(t => t.Fingerprint)
         .ToListAsync(ct);
+      _logger.LogInformation("Import stage reload_existing_after done in {ElapsedMs}ms (existingAfter={ExistingAfter})", stageSw.ElapsedMilliseconds, existingAfter.Count);
 
       var insertedCount = Math.Max(0, existingAfter.Count - existingBefore.Count);
       var dedupedCount = parsedUnique.Count - insertedCount;
@@ -299,6 +339,7 @@ public sealed class ImportProcessor
 
       _logger.LogInformation("Import DONE (parsed={Parsed}, inserted={Inserted}, deduped={Deduped}, errors={Errors})",
         parsedUnique.Count, insertedCount, dedupedCount, errorCount);
+      _logger.LogInformation("Import pipeline completed in {ElapsedMs}ms", totalSw.ElapsedMilliseconds);
 
       if (periodStart is not null)
       {

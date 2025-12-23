@@ -74,7 +74,7 @@ internal sealed class ListTransactionsQueryHandler : IRequestHandler<ListTransac
       }
     }
 
-    query = query.OrderByDescending(t => t.OccurredAt).ThenByDescending(t => t.CreatedAt);
+    query = query.OrderByDescending(t => t.OccurredAt).ThenByDescending(t => t.CreatedAt).ThenByDescending(t => t.Id);
 
     var total = await query.CountAsync(ct);
     var page = request.Page;

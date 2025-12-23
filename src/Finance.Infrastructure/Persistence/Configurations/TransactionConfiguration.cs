@@ -28,6 +28,7 @@ public sealed class TransactionConfiguration : IEntityTypeConfiguration<Transact
 
     b.HasIndex(x => new { x.UserId, x.Fingerprint }).IsUnique().HasDatabaseName("ux_transactions_user_id_fingerprint");
     b.HasIndex(x => new { x.UserId, x.OccurredAt }).HasDatabaseName("ix_transactions_user_id_occurred_at_desc");
+    b.HasIndex(x => new { x.UserId, x.OccurredAt, x.CreatedAt, x.Id }).HasDatabaseName("ix_transactions_user_id_occurred_at_created_at_id_desc");
     b.HasIndex(x => new { x.UserId, x.AccountId, x.OccurredAt }).HasDatabaseName("ix_transactions_user_id_account_id_occurred_at_desc");
     b.HasIndex(x => new { x.UserId, x.CategoryId, x.OccurredAt }).HasDatabaseName("ix_transactions_user_id_category_id_occurred_at_desc");
 

@@ -14,6 +14,8 @@ using Microsoft.OpenApi.Models;
 using Finance.Api.Swagger;
 using Finance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Finance.Api.Health;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,11 +23,14 @@ builder.Host.UseSerilog((ctx, cfg) =>
 {
   cfg.ReadFrom.Configuration(ctx.Configuration);
   cfg.Enrich.FromLogContext();
+  cfg.Enrich.WithProperty("Service", "Finance.Api");
+  cfg.Enrich.WithProperty("Environment", ctx.HostingEnvironment.EnvironmentName);
 });
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddTransient<CorrelationIdMiddleware>();
+builder.Services.AddTransient<RequestLogContextMiddleware>();
 
 builder.Services
   .AddApplication()
@@ -55,6 +60,11 @@ builder.Services.AddSwaggerGen(c =>
 
 builder.Services.Configure<AuthCookieOptions>(builder.Configuration.GetSection(AuthCookieOptions.SectionName));
 builder.Services.Configure<ImportUploadOptions>(builder.Configuration.GetSection(ImportUploadOptions.SectionName));
+
+builder.Services.AddHealthChecks()
+  .AddCheck<DbHealthCheck>("db")
+  .AddCheck<HangfireHealthCheck>("hangfire")
+  .AddCheck<StorageHealthCheck>("storage");
 
 builder.Services.AddCors(options =>
 {
@@ -128,7 +138,23 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-app.UseSerilogRequestLogging();
+app.UseSerilogRequestLogging(options =>
+{
+  options.EnrichDiagnosticContext = (diag, http) =>
+  {
+    var user = http.RequestServices.GetService<ICurrentUser>();
+    diag.Set("UserId", user?.UserId);
+    diag.Set("RequestId", http.TraceIdentifier);
+
+    var cid = http.Items.TryGetValue(CorrelationIdMiddleware.HeaderName, out var correlationId)
+      ? correlationId
+      : http.TraceIdentifier;
+    diag.Set("CorrelationId", cid);
+
+    var importId = RequestLogContextMiddleware.ExtractImportId(http.Request.Path);
+    diag.Set("ImportId", importId);
+  };
+});
 app.UseMiddleware<CorrelationIdMiddleware>();
 
 app.UseSwagger();
@@ -171,9 +197,35 @@ app.UseStatusCodePages(async context =>
 app.UseCors("nextjs");
 
 app.UseAuthentication();
+app.UseMiddleware<RequestLogContextMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();
+
+app.MapGet("/health/live", () => Results.Ok(new { status = "live" }));
+
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+  ResponseWriter = HealthResponseWriter.WriteJson
+});
+
+app.MapHealthChecks("/health/db", new HealthCheckOptions
+{
+  Predicate = r => r.Name == "db",
+  ResponseWriter = HealthResponseWriter.WriteJson
+});
+
+app.MapHealthChecks("/health/hangfire", new HealthCheckOptions
+{
+  Predicate = r => r.Name == "hangfire",
+  ResponseWriter = HealthResponseWriter.WriteJson
+});
+
+app.MapHealthChecks("/health/storage", new HealthCheckOptions
+{
+  Predicate = r => r.Name == "storage",
+  ResponseWriter = HealthResponseWriter.WriteJson
+});
 
 if (app.Configuration.GetValue("Database:EnsureCreated", false))
 {

@@ -7,6 +7,8 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS citext;
+-- For ILIKE '%...%' search acceleration on large tables.
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- =========================
 -- Users (minimal / optional)
@@ -174,6 +176,8 @@ CREATE TABLE IF NOT EXISTS transactions (
 -- Required indexes
 CREATE UNIQUE INDEX IF NOT EXISTS ux_transactions_user_id_fingerprint ON transactions(user_id, fingerprint);
 CREATE INDEX IF NOT EXISTS ix_transactions_user_id_occurred_at_desc ON transactions(user_id, occurred_at DESC);
+-- Helps ORDER BY occurred_at DESC, created_at DESC and future keyset pagination.
+CREATE INDEX IF NOT EXISTS ix_transactions_user_id_occurred_at_created_at_id_desc ON transactions(user_id, occurred_at DESC, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS ix_transactions_user_id_account_id_occurred_at_desc ON transactions(user_id, account_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS ix_transactions_user_id_category_id_occurred_at_desc ON transactions(user_id, category_id, occurred_at DESC);
 
@@ -182,17 +186,16 @@ CREATE INDEX IF NOT EXISTS ix_transactions_import_id ON transactions(import_id);
 CREATE INDEX IF NOT EXISTS ix_transactions_import_row_id ON transactions(import_row_id);
 
 -- Text search (ILIKE) performance:
--- - Requires: CREATE EXTENSION IF NOT EXISTS pg_trgm;
 -- - Recommended indexes (choose based on query patterns):
---   CREATE INDEX IF NOT EXISTS ix_transactions_description_trgm ON transactions USING gin (description gin_trgm_ops);
---   CREATE INDEX IF NOT EXISTS ix_transactions_notes_trgm ON transactions USING gin (notes gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS ix_transactions_description_trgm ON transactions USING gin (description gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS ix_transactions_notes_trgm ON transactions USING gin (notes gin_trgm_ops);
 
 -- Budget progress queries:
 -- - Summing monthly spend benefits from filtering by user_id + category_id + occurred_at.
 -- - Existing index `ix_transactions_user_id_category_id_occurred_at_desc` usually suffices; if needed, consider a partial index:
---   CREATE INDEX IF NOT EXISTS ix_transactions_budget_spend
---   ON transactions(user_id, category_id, occurred_at)
---   WHERE amount < 0 AND ignore_in_dashboard = false;
+CREATE INDEX IF NOT EXISTS ix_transactions_budget_spend
+ON transactions(user_id, category_id, occurred_at)
+WHERE amount < 0 AND ignore_in_dashboard = false;
 
 -- ========
 -- Budgets
