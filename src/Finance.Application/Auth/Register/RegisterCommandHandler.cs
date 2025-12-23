@@ -1,5 +1,6 @@
 using Finance.Application.Abstractions;
 using Finance.Application.Auth.Models;
+using Finance.Application.Categories.Seeding;
 using Finance.Application.Common;
 using Finance.Domain.Entities;
 using MediatR;
@@ -35,6 +36,17 @@ internal sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, 
     user.PasswordHash = _passwordHasher.HashPassword(user, request.Password);
 
     _db.Users.Add(user);
+
+    foreach (var name in DefaultCategories.Names)
+    {
+      _db.Categories.Add(new Category
+      {
+        Id = Guid.NewGuid(),
+        UserId = user.Id,
+        Name = name
+      });
+    }
+
     await _db.SaveChangesAsync(ct);
 
     return Result.Ok(ToProfile(user));
@@ -47,4 +59,3 @@ internal sealed class RegisterCommandHandler : IRequestHandler<RegisterCommand, 
       user.Currency,
       new UserDisplayPreferencesDto(user.DisplayPreferences.Theme, user.DisplayPreferences.CompactMode));
 }
-

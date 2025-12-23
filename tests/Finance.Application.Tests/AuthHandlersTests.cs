@@ -37,6 +37,11 @@ public sealed class AuthHandlersTests
     Assert.Equal("BRL", user.Currency);
     Assert.False(string.IsNullOrWhiteSpace(user.PasswordHash));
     Assert.NotEqual("Password1", user.PasswordHash);
+
+    var categories = await db.Categories.Where(c => c.UserId == user.Id).Select(c => c.Name).ToListAsync();
+    Assert.Equal(12, categories.Count);
+    Assert.Contains("Alimentação", categories);
+    Assert.Contains("Transferências/Interno", categories);
   }
 
   [Fact]

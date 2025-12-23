@@ -115,13 +115,15 @@ CREATE INDEX IF NOT EXISTS ix_import_rows_import_id_status ON import_rows(import
 CREATE TABLE IF NOT EXISTS categories (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name text NOT NULL,
+  name citext NOT NULL,
+  parent_id uuid NULL REFERENCES categories(id) ON DELETE SET NULL,
   color text NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_categories_user_id_name ON categories(user_id, name);
 CREATE INDEX IF NOT EXISTS ix_categories_user_id ON categories(user_id);
+CREATE INDEX IF NOT EXISTS ix_categories_user_id_parent_id ON categories(user_id, parent_id);
 
 -- ===============
 -- Category rules
