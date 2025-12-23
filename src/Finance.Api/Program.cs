@@ -10,6 +10,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.WebUtilities;
 using Serilog;
+using Microsoft.OpenApi.Models;
+using Finance.Api.Swagger;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +30,26 @@ builder.Services
   .AddInfrastructure(builder.Configuration);
 
 builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+  c.SwaggerDoc("v1", new OpenApiInfo { Title = "Dashfin API", Version = "v1" });
+  c.MapType<DateOnly>(() => new OpenApiSchema { Type = "string", Format = "date" });
+
+  c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+  {
+    Name = "Authorization",
+    Type = SecuritySchemeType.Http,
+    Scheme = "bearer",
+    BearerFormat = "JWT",
+    In = ParameterLocation.Header,
+    Description = "JWT Authorization header using the Bearer scheme. Example: \"Bearer {token}\""
+  });
+
+  c.OperationFilter<ProblemDetailsOperationFilter>();
+  c.OperationFilter<AuthOperationFilter>();
+  c.OperationFilter<ExamplesOperationFilter>();
+});
 
 builder.Services.Configure<AuthCookieOptions>(builder.Configuration.GetSection(AuthCookieOptions.SectionName));
 builder.Services.Configure<ImportUploadOptions>(builder.Configuration.GetSection(ImportUploadOptions.SectionName));
@@ -54,6 +76,7 @@ builder.Services.AddProblemDetails(options =>
       ctx.HttpContext.Items.TryGetValue(CorrelationIdMiddleware.HeaderName, out var correlationId)
         ? correlationId
         : ctx.HttpContext.TraceIdentifier;
+    ctx.ProblemDetails.Extensions["traceId"] = ctx.HttpContext.TraceIdentifier;
   };
 });
 
@@ -64,8 +87,15 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
     var problem = new ValidationProblemDetails(context.ModelState)
     {
       Title = "Validation failed",
-      Status = StatusCodes.Status400BadRequest
+      Status = StatusCodes.Status400BadRequest,
+      Detail = "One or more validation errors occurred."
     };
+    problem.Extensions["code"] = "validation_error";
+    problem.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+    problem.Extensions["correlationId"] =
+      context.HttpContext.Items.TryGetValue(CorrelationIdMiddleware.HeaderName, out var correlationId)
+        ? correlationId
+        : context.HttpContext.TraceIdentifier;
     return new BadRequestObjectResult(problem);
   };
 });
@@ -99,6 +129,13 @@ var app = builder.Build();
 app.UseSerilogRequestLogging();
 app.UseMiddleware<CorrelationIdMiddleware>();
 
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+  c.SwaggerEndpoint("/swagger/v1/swagger.json", "Dashfin API v1");
+  c.DisplayRequestDuration();
+});
+
 app.UseExceptionHandler();
 app.UseStatusCodePages(async context =>
 {
@@ -110,9 +147,20 @@ app.UseStatusCodePages(async context =>
   var problem = new ProblemDetails
   {
     Title = ReasonPhrases.GetReasonPhrase(status),
-    Status = status
+    Status = status,
+    Detail = ReasonPhrases.GetReasonPhrase(status)
   };
   problem.Extensions["correlationId"] = correlationId;
+  problem.Extensions["traceId"] = http.TraceIdentifier;
+  problem.Extensions["code"] = status switch
+  {
+    StatusCodes.Status400BadRequest => "bad_request",
+    StatusCodes.Status401Unauthorized => "unauthorized",
+    StatusCodes.Status403Forbidden => "forbidden",
+    StatusCodes.Status404NotFound => "not_found",
+    StatusCodes.Status409Conflict => "conflict",
+    _ => "unexpected"
+  };
 
   http.Response.ContentType = "application/problem+json";
   await http.Response.WriteAsJsonAsync(problem);

@@ -4,6 +4,7 @@ using Finance.Application.Common.Exceptions;
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 
 namespace Finance.Api.Errors;
 
@@ -17,6 +18,8 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
     var correlationId =
       httpContext.Items.TryGetValue(CorrelationIdMiddleware.HeaderName, out var cid) ? cid : httpContext.TraceIdentifier;
 
+    var traceId = httpContext.TraceIdentifier;
+
     ProblemDetails problem = exception switch
     {
       AppException app => CreateProblemFromAppError(app.Error),
@@ -26,22 +29,33 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
           .ToDictionary(g => g.Key, g => g.Select(x => x.ErrorMessage).ToArray()))
       {
         Title = "Validation failed",
-        Status = StatusCodes.Status400BadRequest
+        Status = StatusCodes.Status400BadRequest,
+        Detail = "One or more validation errors occurred."
       },
       UnauthorizedAccessException => new ProblemDetails
       {
-        Title = "Unauthorized",
-        Status = StatusCodes.Status401Unauthorized
+        Title = ReasonPhrases.GetReasonPhrase(StatusCodes.Status401Unauthorized),
+        Status = StatusCodes.Status401Unauthorized,
+        Detail = "Unauthorized"
       },
       _ => new ProblemDetails
       {
-        Title = "Unexpected error",
-        Status = StatusCodes.Status500InternalServerError
+        Title = ReasonPhrases.GetReasonPhrase(StatusCodes.Status500InternalServerError),
+        Status = StatusCodes.Status500InternalServerError,
+        Detail = "Unexpected error"
       }
     };
 
-    problem.Extensions["correlationId"] = correlationId;
+    if (exception is AppException appEx)
+      problem.Extensions["code"] = appEx.Error.Code;
+    if (problem is ValidationProblemDetails)
+      problem.Extensions["code"] = "validation_error";
 
+    problem.Extensions["correlationId"] = correlationId;
+    problem.Extensions["traceId"] = traceId;
+    problem.Extensions.TryAdd("code", MapStatusToCode(problem.Status ?? 500));
+
+    httpContext.Response.ContentType = "application/problem+json";
     httpContext.Response.StatusCode = problem.Status ?? StatusCodes.Status500InternalServerError;
     await httpContext.Response.WriteAsJsonAsync(problem, cancellationToken);
     return true;
@@ -61,10 +75,20 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
 
     return new ProblemDetails
     {
-      Title = error.Code,
+      Title = ReasonPhrases.GetReasonPhrase(status),
       Detail = error.Message,
       Status = status
     };
   }
-}
 
+  private static string MapStatusToCode(int status) =>
+    status switch
+    {
+      StatusCodes.Status400BadRequest => "bad_request",
+      StatusCodes.Status401Unauthorized => "unauthorized",
+      StatusCodes.Status403Forbidden => "forbidden",
+      StatusCodes.Status404NotFound => "not_found",
+      StatusCodes.Status409Conflict => "conflict",
+      _ => "unexpected"
+    };
+}
