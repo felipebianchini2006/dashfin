@@ -38,8 +38,13 @@
   - Repositórios/queries sempre filtram por `user_id`.
   - (Opcional) Global query filter no EF para entidades que implementam `IUserOwnedEntity` (exige cuidado com contexto design-time).
 
+## Timezone e agregações diárias
+
+- `transactions.occurred_at` é usado como **data** (sem horário) no domínio/import (normalizado para `00:00:00Z`).
+- As agregações diárias (dashboard/timeseries) fazem `GROUP BY occurred_at::date` / `OccurredAt.Date` e tratam a data como já “fechada” na importação.
+- Se no futuro houver lançamentos com horário (não normalizados), a regra deve mudar para agrupar por “dia no timezone do usuário” (ex.: `occurred_at AT TIME ZONE users.timezone` no Postgres).
+
 ## Autenticação escolhida
 
 - JWT (access token) + refresh token em cookie httpOnly.
 - Persistência do refresh token (hash + expiração) deve existir no banco (coluna(s) em `users` ou tabela dedicada) — criar em migração quando implementar auth de verdade.
-
