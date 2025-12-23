@@ -35,6 +35,11 @@
   - Sempre filtrar por `user_id` nos endpoints; evita scans caros e melhora cache/localidade do índice.
 - **JSONB**
   - Usar `metadata`/`raw_data` com parcimônia; indexar JSONB só quando houver consultas reais por campos internos.
+- **Busca textual (`ILIKE`)**
+  - Para `transactions.description`/`transactions.notes` com `ILIKE '%...%'`, considere `pg_trgm` + GIN:
+    - `CREATE EXTENSION IF NOT EXISTS pg_trgm;`
+    - `CREATE INDEX ... ON transactions USING gin (description gin_trgm_ops);`
+    - `CREATE INDEX ... ON transactions USING gin (notes gin_trgm_ops);`
 - **Import grande**
   - Inserções em lote (batch) e transação por `ImportBatch` (no job) ajudam muito.
   - Evitar “upsert 1 por 1” em volumes altos: preferir batching e/ou staging.
@@ -70,4 +75,3 @@
 ## Artefatos
 
 - DDL de referência (SQL): `db/schema.sql`
-

@@ -160,6 +160,8 @@ CREATE TABLE IF NOT EXISTS transactions (
   import_row_id bigint NULL REFERENCES import_rows(id) ON DELETE SET NULL,
   occurred_at timestamptz NOT NULL,
   description text NOT NULL,
+  notes text NULL,
+  ignore_in_dashboard boolean NOT NULL DEFAULT false,
   amount numeric(18,2) NOT NULL,
   currency char(3) NOT NULL DEFAULT 'BRL',
   fingerprint char(64) NOT NULL,
@@ -176,6 +178,12 @@ CREATE INDEX IF NOT EXISTS ix_transactions_user_id_category_id_occurred_at_desc 
 -- Extra helpful indexes
 CREATE INDEX IF NOT EXISTS ix_transactions_import_id ON transactions(import_id);
 CREATE INDEX IF NOT EXISTS ix_transactions_import_row_id ON transactions(import_row_id);
+
+-- Text search (ILIKE) performance:
+-- - Requires: CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- - Recommended indexes (choose based on query patterns):
+--   CREATE INDEX IF NOT EXISTS ix_transactions_description_trgm ON transactions USING gin (description gin_trgm_ops);
+--   CREATE INDEX IF NOT EXISTS ix_transactions_notes_trgm ON transactions USING gin (notes gin_trgm_ops);
 
 -- ========
 -- Budgets

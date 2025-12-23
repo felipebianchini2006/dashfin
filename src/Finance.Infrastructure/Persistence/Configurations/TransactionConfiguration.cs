@@ -18,6 +18,8 @@ public sealed class TransactionConfiguration : IEntityTypeConfiguration<Transact
     b.Property(x => x.ImportRowId).HasColumnName("import_row_id");
     b.Property(x => x.OccurredAt).HasColumnName("occurred_at");
     b.Property(x => x.Description).HasColumnName("description");
+    b.Property(x => x.Notes).HasColumnName("notes");
+    b.Property(x => x.IgnoreInDashboard).HasColumnName("ignore_in_dashboard").HasDefaultValue(false);
     b.Property(x => x.Amount).HasColumnName("amount").HasPrecision(18, 2);
     b.Property(x => x.Currency).HasColumnName("currency").HasMaxLength(3).IsFixedLength();
     b.Property(x => x.Fingerprint).HasColumnName("fingerprint").HasMaxLength(64).IsFixedLength();
@@ -33,4 +35,3 @@ public sealed class TransactionConfiguration : IEntityTypeConfiguration<Transact
     b.HasIndex(x => x.ImportRowId).HasDatabaseName("ix_transactions_import_row_id");
   }
 }
-

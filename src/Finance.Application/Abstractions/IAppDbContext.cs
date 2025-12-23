@@ -1,5 +1,6 @@
 using Finance.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace Finance.Application.Abstractions;
 
@@ -17,5 +18,6 @@ public interface IAppDbContext : Finance.Application.Abstractions.Persistence.IU
   DbSet<AlertRule> AlertRules { get; }
   DbSet<AlertEvent> AlertEvents { get; }
 
+  DatabaseFacade Database { get; }
   Task<int> SaveChangesAsync(CancellationToken ct);
 }

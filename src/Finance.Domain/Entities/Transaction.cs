@@ -11,6 +11,8 @@ public sealed class Transaction : BaseEntity<Guid>, IUserOwnedEntity
   public long? ImportRowId { get; set; }
   public DateTimeOffset OccurredAt { get; set; }
   public string Description { get; set; } = string.Empty;
+  public string? Notes { get; set; }
+  public bool IgnoreInDashboard { get; set; }
   public decimal Amount { get; set; }
   public string Currency { get; set; } = "BRL";
   public string Fingerprint { get; set; } = string.Empty;
