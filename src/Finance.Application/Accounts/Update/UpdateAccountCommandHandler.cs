@@ -28,6 +28,17 @@ internal sealed class UpdateAccountCommandHandler : IRequestHandler<UpdateAccoun
     if (account is null)
       return Result.Fail<AccountDto>(Error.NotFound("Account not found."));
 
+    if (request.Type is not null && request.Type.Value != account.Type)
+    {
+      var hasTx = await _db.Transactions.AnyAsync(t => t.UserId == userId.Value && t.AccountId == account.Id, ct);
+      if (hasTx)
+        return Result.Fail<AccountDto>(Error.Validation("Account type can only be changed when there are no transactions."));
+
+      account.Type = request.Type.Value;
+      if (account.Type == AccountType.CreditCard)
+        account.InitialBalance = 0m;
+    }
+
     if (request.Name is not null)
     {
       if (string.IsNullOrWhiteSpace(request.Name))
@@ -63,4 +74,3 @@ internal sealed class UpdateAccountCommandHandler : IRequestHandler<UpdateAccoun
       null));
   }
 }
-

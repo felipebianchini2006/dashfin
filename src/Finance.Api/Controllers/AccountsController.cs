@@ -18,7 +18,7 @@ public sealed class AccountsController : ControllerBase
   public AccountsController(IMediator mediator) => _mediator = mediator;
 
   public sealed record CreateAccountRequest(string Name, AccountType Type, decimal? InitialBalance);
-  public sealed record UpdateAccountRequest(string? Name, decimal? InitialBalance);
+  public sealed record UpdateAccountRequest(string? Name, AccountType? Type, decimal? InitialBalance);
 
   [HttpGet]
   public async Task<IActionResult> List(CancellationToken ct)
@@ -41,10 +41,9 @@ public sealed class AccountsController : ControllerBase
   [HttpPatch("{id:guid}")]
   public async Task<IActionResult> Update([FromRoute] Guid id, [FromBody] UpdateAccountRequest request, CancellationToken ct)
   {
-    var result = await _mediator.Send(new UpdateAccountCommand(id, request.Name, request.InitialBalance), ct);
+    var result = await _mediator.Send(new UpdateAccountCommand(id, request.Name, request.Type, request.InitialBalance), ct);
     if (result.IsFailure)
       throw new AppException(result.Error!);
     return Ok(result.Value);
   }
 }
-

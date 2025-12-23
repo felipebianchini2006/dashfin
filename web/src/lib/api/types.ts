@@ -14,6 +14,15 @@ export type ProblemDetails = {
 
 export type AccessTokenResponse = { accessToken: string };
 
+export type UserDisplayPreferencesDto = { theme: string; compactMode: boolean };
+
+export type UserProfileDto = {
+  email: string;
+  timezone: string;
+  currency: string;
+  displayPreferences: UserDisplayPreferencesDto;
+};
+
 export enum AccountType {
   Checking = 1,
   CreditCard = 2,

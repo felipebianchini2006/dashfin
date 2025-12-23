@@ -54,7 +54,7 @@ public sealed class AccountsHandlersTests
     await db.SaveChangesAsync(CancellationToken.None);
 
     var handler = new UpdateAccountCommandHandler(db, currentUser);
-    var result = await handler.Handle(new UpdateAccountCommand(account.Id, null, 10m), CancellationToken.None);
+    var result = await handler.Handle(new UpdateAccountCommand(account.Id, null, null, 10m), CancellationToken.None);
 
     Assert.True(result.IsFailure);
     Assert.Equal("validation_error", result.Error!.Code);
@@ -149,8 +149,7 @@ public sealed class AccountsHandlersTests
   public async Task UpdateAccountValidator_requires_at_least_one_field()
   {
     var validator = new UpdateAccountCommandValidator();
-    var result = await validator.ValidateAsync(new UpdateAccountCommand(Guid.NewGuid(), null, null));
+    var result = await validator.ValidateAsync(new UpdateAccountCommand(Guid.NewGuid(), null, null, null));
     Assert.False(result.IsValid);
   }
 }
-

@@ -20,20 +20,25 @@ import type {
   ImportDto,
   ImportRowAuditDto,
   ListImportsResponse,
-  ListTransactionsResponse
+  ListTransactionsResponse,
+  UserProfileDto
 } from "@/lib/api/types";
-
-export type MeDto = {
-  email: string;
-  timezone: string;
-  currency: string;
-  displayPreferences: { theme: string; compactMode: boolean };
-};
 
 export function useMe() {
   return useQuery({
     queryKey: ["me"],
-    queryFn: async () => (await api.get<MeDto>("/me")).data
+    queryFn: async () => (await api.get<UserProfileDto>("/me")).data
+  });
+}
+
+export function useUpdateMe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { timezone?: string; currency?: string; displayPreferences?: { theme?: string; compactMode?: boolean } }) =>
+      (await api.patch<UserProfileDto>("/me", body)).data,
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["me"] });
+    }
   });
 }
 
@@ -52,6 +57,23 @@ export function useCreateAccount() {
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["accounts"] });
       await qc.invalidateQueries({ queryKey: ["dashboard"] });
+    }
+  });
+}
+
+export function useUpdateAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { id: string; name?: string; type?: number; initialBalance?: number | null }) => {
+      const body: Record<string, unknown> = {};
+      if (vars.name !== undefined) body["name"] = vars.name;
+      if (vars.type !== undefined) body["type"] = vars.type;
+      if (vars.initialBalance !== undefined) body["initialBalance"] = vars.initialBalance;
+      return (await api.patch<AccountDto>(`/accounts/${vars.id}`, body)).data;
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["accounts"] });
+      await qc.invalidateQueries({ queryKey: ["dashboardBalances"] });
     }
   });
 }
