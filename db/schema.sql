@@ -230,7 +230,7 @@ CREATE TABLE IF NOT EXISTS alert_rules (
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT ck_alert_rules_type CHECK (type IN (1, 2)),
   CONSTRAINT ck_alert_rules_thresholds CHECK (
-    (type = 1 AND budget_id IS NOT NULL)
+    (type = 1 AND category_id IS NOT NULL)
     OR
     (type = 2 AND (threshold_amount IS NOT NULL OR threshold_percent IS NOT NULL))
   )
@@ -249,6 +249,7 @@ CREATE TABLE IF NOT EXISTS alert_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   alert_rule_id uuid NOT NULL REFERENCES alert_rules(id) ON DELETE CASCADE,
+  fingerprint char(64) NOT NULL,
   status smallint NOT NULL,
   occurred_at timestamptz NOT NULL,
   title text NOT NULL,
@@ -258,6 +259,7 @@ CREATE TABLE IF NOT EXISTS alert_events (
   CONSTRAINT ck_alert_events_status CHECK (status IN (1, 2, 3))
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS ux_alert_events_user_id_fingerprint ON alert_events(user_id, fingerprint);
 CREATE INDEX IF NOT EXISTS ix_alert_events_user_id_occurred_at_desc ON alert_events(user_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS ix_alert_events_user_id_status_occurred_at_desc ON alert_events(user_id, status, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS ix_alert_events_alert_rule_id_occurred_at_desc ON alert_events(alert_rule_id, occurred_at DESC);

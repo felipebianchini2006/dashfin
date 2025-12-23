@@ -7,6 +7,7 @@ public sealed class AlertEvent : BaseEntity<Guid>, IUserOwnedEntity
 {
   public Guid UserId { get; set; }
   public Guid AlertRuleId { get; set; }
+  public string Fingerprint { get; set; } = string.Empty;
   public AlertEventStatus Status { get; set; }
   public DateTimeOffset OccurredAt { get; set; }
   public string Title { get; set; } = string.Empty;

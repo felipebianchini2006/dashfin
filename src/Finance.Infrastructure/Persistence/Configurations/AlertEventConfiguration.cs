@@ -13,6 +13,7 @@ public sealed class AlertEventConfiguration : IEntityTypeConfiguration<AlertEven
     b.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
     b.Property(x => x.UserId).HasColumnName("user_id");
     b.Property(x => x.AlertRuleId).HasColumnName("alert_rule_id");
+    b.Property(x => x.Fingerprint).HasColumnName("fingerprint").HasMaxLength(64).IsFixedLength();
     b.Property(x => x.Status).HasColumnName("status").HasConversion<short>();
     b.Property(x => x.OccurredAt).HasColumnName("occurred_at");
     b.Property(x => x.Title).HasColumnName("title");
@@ -20,9 +21,9 @@ public sealed class AlertEventConfiguration : IEntityTypeConfiguration<AlertEven
     b.Property(x => x.PayloadJson).HasColumnName("payload").HasColumnType("jsonb");
     b.Property(x => x.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("now()");
 
+    b.HasIndex(x => new { x.UserId, x.Fingerprint }).IsUnique().HasDatabaseName("ux_alert_events_user_id_fingerprint");
     b.HasIndex(x => new { x.UserId, x.OccurredAt }).HasDatabaseName("ix_alert_events_user_id_occurred_at_desc");
     b.HasIndex(x => new { x.UserId, x.Status, x.OccurredAt }).HasDatabaseName("ix_alert_events_user_id_status_occurred_at_desc");
     b.HasIndex(x => new { x.AlertRuleId, x.OccurredAt }).HasDatabaseName("ix_alert_events_alert_rule_id_occurred_at_desc");
   }
 }
-
