@@ -8,7 +8,10 @@ import type {
   AccountDto,
   AlertEventDto,
   BudgetDto,
+  CategoryRuleDto,
+  CategoryRuleMatchType,
   CategoryDto,
+  UpdateTransactionResultDto,
   DashboardBalancesDto,
   DashboardCategoriesDto,
   DashboardSummaryDto,
@@ -112,6 +115,8 @@ export function useTransactions(params: {
   from?: string;
   to?: string;
   q?: string;
+  min?: number;
+  max?: number;
   page?: number;
   page_size?: number;
   account_id?: string;
@@ -121,6 +126,65 @@ export function useTransactions(params: {
   return useQuery({
     queryKey: ["transactions", params],
     queryFn: async () => (await api.get<ListTransactionsResponse>("/transactions", { params })).data
+  });
+}
+
+export function useUpdateTransaction() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (vars: {
+      id: string;
+      category_id?: string;
+      notes?: string;
+      ignore_in_dashboard?: boolean;
+    }) => {
+      const body: Record<string, unknown> = {};
+      if (vars.category_id !== undefined) body["category_id"] = vars.category_id;
+      if (vars.notes !== undefined) body["notes"] = vars.notes;
+      if (vars.ignore_in_dashboard !== undefined) body["ignore_in_dashboard"] = vars.ignore_in_dashboard;
+      return (await api.patch<UpdateTransactionResultDto>(`/transactions/${vars.id}`, body)).data;
+    },
+    onSuccess: async (data) => {
+      qc.setQueriesData({ queryKey: ["transactions"] }, (old: any) => {
+        if (!old || typeof old !== "object") return old;
+        if (!Array.isArray(old.items)) return old;
+        const idx = old.items.findIndex((t: any) => t?.id === data.transaction.id);
+        if (idx === -1) return old;
+        const items = [...old.items];
+        items[idx] = data.transaction;
+        return { ...old, items };
+      });
+
+      await qc.invalidateQueries({ queryKey: ["transactions"] });
+      await qc.invalidateQueries({ queryKey: ["dashboardSummary"] });
+      await qc.invalidateQueries({ queryKey: ["dashboardCategories"] });
+      await qc.invalidateQueries({ queryKey: ["dashboardTimeseries"] });
+      await qc.invalidateQueries({ queryKey: ["dashboardBalances"] });
+    }
+  });
+}
+
+export function useCategoryRules() {
+  return useQuery({
+    queryKey: ["categoryRules"],
+    queryFn: async () => (await api.get<CategoryRuleDto[]>("/category-rules")).data
+  });
+}
+
+export function useCreateCategoryRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: {
+      pattern: string;
+      match_type: CategoryRuleMatchType;
+      category_id: string;
+      priority: number;
+      is_active: boolean;
+    }) => (await api.post<CategoryRuleDto>("/category-rules", body)).data,
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["categoryRules"] });
+    }
   });
 }
 

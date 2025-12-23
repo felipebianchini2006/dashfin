@@ -3,138 +3,172 @@
 import React, { useMemo, useState } from "react";
 import { useAccounts, useCategories, useTransactions } from "@/lib/api/hooks";
 import { yyyyMm01 } from "@/lib/date";
+import { TransactionsFilters, type TransactionsFilterDraft } from "@/components/transactions/TransactionsFilters";
+import { TransactionsTable } from "@/components/transactions/TransactionsTable";
+import { PaginationBar } from "@/components/transactions/PaginationBar";
+import type { CategoryRuleSuggestionDto } from "@/lib/api/types";
+import { CreateCategoryRuleModal } from "@/components/categoryRules/CreateCategoryRuleModal";
+
+function endOfMonth(yyyyMm01Str: string) {
+  const d = new Date(`${yyyyMm01Str}T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + 1);
+  d.setUTCDate(0);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function parseNumberOrUndefined(v: string) {
+  const normalized = v.trim().replace(",", ".");
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : undefined;
+}
 
 export default function TransactionsPage() {
-  const [month, setMonth] = useState(() => yyyyMm01(new Date()));
-  const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
-  const [accountId, setAccountId] = useState<string>("");
-  const [categoryId, setCategoryId] = useState<string>("");
-  const [type, setType] = useState<string>("");
+  const defaultMonth = useMemo(() => yyyyMm01(new Date()), []);
+  const [draft, setDraft] = useState<TransactionsFilterDraft>(() => ({
+    from: defaultMonth,
+    to: endOfMonth(defaultMonth),
+    accountId: "",
+    categoryId: "",
+    type: "",
+    min: "",
+    max: "",
+    q: ""
+  }));
+  const [filters, setFilters] = useState<TransactionsFilterDraft>(draft);
 
   const accounts = useAccounts();
   const categories = useCategories();
 
-  const from = `${month}T00:00:00Z`;
-  const to = useMemo(() => {
-    const d = new Date(`${month}T00:00:00Z`);
-    d.setUTCMonth(d.getUTCMonth() + 1);
-    d.setUTCDate(d.getUTCDate() - 1);
-    const y = d.getUTCFullYear();
-    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(d.getUTCDate()).padStart(2, "0");
-    return `${y}-${m}-${day}T23:59:59Z`;
-  }, [month]);
+  const from = filters.from ? `${filters.from}T00:00:00Z` : undefined;
+  const to = filters.to ? `${filters.to}T23:59:59Z` : undefined;
+
+  const min = filters.min ? parseNumberOrUndefined(filters.min) : undefined;
+  const max = filters.max ? parseNumberOrUndefined(filters.max) : undefined;
 
   const tx = useTransactions({
     page,
     page_size: 50,
-    q: q.length ? q : undefined,
-    account_id: accountId || undefined,
-    category_id: categoryId || undefined,
-    type: type ? (Number(type) as 1 | 2) : undefined,
+    q: filters.q.trim().length ? filters.q.trim() : undefined,
+    min,
+    max,
+    account_id: filters.accountId || undefined,
+    category_id: filters.categoryId || undefined,
+    type: filters.type ? (Number(filters.type) as 1 | 2) : undefined,
     from,
     to
   });
 
+  const accountsById = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const a of accounts.data ?? []) m[a.id] = a.name;
+    return m;
+  }, [accounts.data]);
+
+  const categoriesById = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const c of categories.data ?? []) m[c.id] = c.name;
+    return m;
+  }, [categories.data]);
+
+  const [suggestion, setSuggestion] = useState<CategoryRuleSuggestionDto | null>(null);
+  const [suggestionOpen, setSuggestionOpen] = useState(false);
+
   return (
     <div className="container">
-      <div className="card">
-        <div className="row" style={{ alignItems: "flex-end" }}>
-          <div className="field">
-            <label>Mês</label>
-            <input type="date" value={month} onChange={(e) => setMonth(e.target.value)} />
+      <TransactionsFilters
+        draft={draft}
+        accounts={accounts.data ?? []}
+        categories={categories.data ?? []}
+        onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+        onApply={() => {
+          setFilters(draft);
+          setPage(1);
+        }}
+        onReset={() => {
+          const next: TransactionsFilterDraft = {
+            from: defaultMonth,
+            to: endOfMonth(defaultMonth),
+            accountId: "",
+            categoryId: "",
+            type: "",
+            min: "",
+            max: "",
+            q: ""
+          };
+          setDraft(next);
+          setFilters(next);
+          setPage(1);
+        }}
+      />
+
+      {suggestion ? (
+        <div className="card" style={{ marginTop: 16, borderColor: "rgba(96, 165, 250, 0.35)" }}>
+          <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div>Quer criar uma regra automática para futuros lançamentos semelhantes?</div>
+              <div className="muted" style={{ marginTop: 6, fontSize: 13 }}>
+                CONTAINS <code>{suggestion.pattern}</code> → <code>{categoriesById[suggestion.categoryId] ?? "—"}</code>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button className="btn" onClick={() => setSuggestion(null)}>
+                Ignorar
+              </button>
+              <button className="btn primary" onClick={() => setSuggestionOpen(true)}>
+                Criar regra
+              </button>
+            </div>
           </div>
-          <div className="field" style={{ minWidth: 220 }}>
-            <label>Busca</label>
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="description/notes"
-              onKeyDown={(e) => e.key === "Enter" && setPage(1)}
-            />
-          </div>
-          <div className="field">
-            <label>Conta</label>
-            <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-              <option value="">Todas</option>
-              {(accounts.data ?? []).map((a) => (
-                <option value={a.id} key={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>Categoria</label>
-            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">Todas</option>
-              {(categories.data ?? []).map((c) => (
-                <option value={c.id} key={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>Tipo</label>
-            <select value={type} onChange={(e) => setType(e.target.value)}>
-              <option value="">Todos</option>
-              <option value="1">Entrada</option>
-              <option value="2">Saída</option>
-            </select>
-          </div>
-          <button className="btn" onClick={() => setPage(1)}>
-            Filtrar
-          </button>
+        </div>
+      ) : null}
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+          <h2 style={{ margin: 0 }}>Transações</h2>
+          <div className="muted">{tx.isFetching ? "Atualizando..." : "—"}</div>
         </div>
 
         {tx.isError ? <div className="error" style={{ marginTop: 12 }}>Falha ao carregar transações.</div> : null}
+        {tx.isLoading ? <div style={{ marginTop: 12 }}>Carregando...</div> : null}
 
-        <div style={{ marginTop: 12 }}>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Data</th>
-                <th>Descrição</th>
-                <th>Conta</th>
-                <th>Categoria</th>
-                <th>Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(tx.data?.items ?? []).map((t) => (
-                <tr key={t.id}>
-                  <td>{t.occurredAt.slice(0, 10)}</td>
-                  <td>
-                    {t.description} {t.notes ? <span className="muted">({t.notes})</span> : null}
-                  </td>
-                  <td>{(accounts.data ?? []).find((a) => a.id === t.accountId)?.name ?? "—"}</td>
-                  <td>{(categories.data ?? []).find((c) => c.id === t.categoryId)?.name ?? "—"}</td>
-                  <td style={{ color: t.amount < 0 ? "var(--danger)" : undefined }}>{t.amount.toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
-            <div className="muted">
-              Total: {tx.data?.totalCount ?? 0} • Página {tx.data?.page ?? page}
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button className="btn" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-                Anterior
-              </button>
-              <button
-                className="btn"
-                disabled={(tx.data?.items.length ?? 0) < 50}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Próxima
-              </button>
-            </div>
+        {(tx.data?.items?.length ?? 0) === 0 && !tx.isLoading && !tx.isError ? (
+          <div className="muted" style={{ marginTop: 12 }}>
+            Nenhuma transação encontrada.
           </div>
-        </div>
+        ) : null}
+
+        {(tx.data?.items?.length ?? 0) > 0 ? (
+          <div style={{ marginTop: 12 }}>
+            <TransactionsTable
+              transactions={tx.data!.items}
+              accountsById={accountsById}
+              categories={categories.data ?? []}
+              onSuggestedRule={(s) => setSuggestion(s)}
+            />
+            <PaginationBar
+              page={tx.data?.page ?? page}
+              pageSize={tx.data?.pageSize ?? 50}
+              totalCount={tx.data?.totalCount ?? 0}
+              onPage={(p) => setPage(p)}
+            />
+          </div>
+        ) : null}
       </div>
+
+      {suggestion ? (
+        <CreateCategoryRuleModal
+          key={`${suggestion.categoryId}:${suggestion.pattern}`}
+          open={suggestionOpen}
+          suggestion={suggestion}
+          categories={categories.data ?? []}
+          onClose={() => setSuggestionOpen(false)}
+          onCreated={() => setSuggestion(null)}
+        />
+      ) : null}
     </div>
   );
 }

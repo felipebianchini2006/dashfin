@@ -55,6 +55,38 @@ export type ListTransactionsResponse = {
   totalCount: number;
 };
 
+export enum CategoryRuleMatchType {
+  Contains = 1,
+  Regex = 2
+}
+
+export type CategoryRuleDto = {
+  id: Guid;
+  categoryId: Guid;
+  matchType: CategoryRuleMatchType;
+  pattern: string;
+  priority: number;
+  isActive: boolean;
+  accountId: Guid | null;
+  minAmount: number | null;
+  maxAmount: number | null;
+  createdAt: string;
+};
+
+export type CategoryRuleSuggestionDto = {
+  reason: string;
+  pattern: string;
+  matchType: CategoryRuleMatchType;
+  categoryId: Guid;
+  priority: number;
+  isActive: boolean;
+};
+
+export type UpdateTransactionResultDto = {
+  transaction: TransactionDto;
+  suggestedRule: CategoryRuleSuggestionDto | null;
+};
+
 export type CategoryDto = {
   id: Guid;
   name: string;
