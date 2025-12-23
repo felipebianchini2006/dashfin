@@ -1,0 +1,25 @@
+# Build results
+**/[Bb]in/
+**/[Oo]bj/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+
+# Test results
+TestResults/
+**/TestResults/
+
+# NuGet / packages (when restored locally)
+**/packages/
+*.nupkg
+*.snupkg
+
+# Logs
+*.log
+
